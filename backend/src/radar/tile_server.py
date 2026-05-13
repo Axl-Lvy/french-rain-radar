@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import re
 import tempfile
+from collections import OrderedDict
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -36,10 +37,12 @@ from .tiles import render_tile_lonlat, render_tile_projected
 log = structlog.get_logger(__name__)
 app = FastAPI(title="French rain radar tile server", docs_url=None, redoc_url=None)
 
-# Lazy memoised loaders: ``(layer, timestamp) -> field``. Keep only the most
-# recently used few since the source files are small (2 MB radar, sub-MB GRIB).
+# LRU memo of decoded source files keyed by ``(layer, timestamp)``. Bounded
+# at _RECENT_SOURCES_CAP entries; a radar mosaic is ~50 MB so worst case
+# ~400 MB resident. OrderedDict + move_to_end gives real LRU semantics
+# (hot sources stay; cold ones get evicted first).
 _RECENT_SOURCES_CAP = 8
-_recent_sources: dict[tuple[str, str], object] = {}
+_recent_sources: OrderedDict[tuple[str, str], object] = OrderedDict()
 
 
 _TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$")
@@ -76,10 +79,11 @@ def _load_source(layer: str, source_path: Path) -> object:
 def _get_source(layer: str, ts_url: str, source_path: Path) -> object:
     key = (layer, ts_url)
     if key in _recent_sources:
+        _recent_sources.move_to_end(key)  # mark as most-recently-used
         return _recent_sources[key]
     src = _load_source(layer, source_path)
-    if len(_recent_sources) >= _RECENT_SOURCES_CAP:
-        _recent_sources.pop(next(iter(_recent_sources)))
+    while len(_recent_sources) >= _RECENT_SOURCES_CAP:
+        _recent_sources.popitem(last=False)  # evict least-recently-used
     _recent_sources[key] = src
     return src
 

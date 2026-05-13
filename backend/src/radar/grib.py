@@ -40,25 +40,24 @@ def read_arome_pi_precip(path: Path) -> PrecipField:
     water). We multiply by 4 to express it as mm/h, which is what the
     colormap / nowcast / client all expect.
     """
-    ds = open_grib(path)
-    if "tirf" not in ds.data_vars:
-        raise RuntimeError(
-            f"AROME-PI GRIB does not expose 'tirf'; vars={list(ds.data_vars)}"
-        )
+    with open_grib(path) as ds:
+        if "tirf" not in ds.data_vars:
+            raise RuntimeError(
+                f"AROME-PI GRIB does not expose 'tirf'; vars={list(ds.data_vars)}"
+            )
 
-    var = ds["tirf"]
-    values_mm_15min = var.values.astype(np.float32)
-    values_mm_h = values_mm_15min * np.float32(4.0)
+        values_mm_15min = ds["tirf"].values.astype(np.float32)
+        values_mm_h = values_mm_15min * np.float32(4.0)
 
-    lats = ds["latitude"].values.astype(np.float64)
-    lons = ds["longitude"].values.astype(np.float64)
+        lats = ds["latitude"].values.astype(np.float64)
+        lons = ds["longitude"].values.astype(np.float64)
 
-    # cfgrib exposes valid_time as a scalar datetime64.
-    valid_time = ds.coords.get("valid_time")
-    if valid_time is None:
-        raise RuntimeError("AROME-PI GRIB missing valid_time coord")
-    ts = np.datetime64(valid_time.values).astype("datetime64[s]").astype(int)
-    timestamp = datetime.fromtimestamp(ts, tz=UTC)
+        # cfgrib exposes valid_time as a scalar datetime64.
+        valid_time = ds.coords.get("valid_time")
+        if valid_time is None:
+            raise RuntimeError("AROME-PI GRIB missing valid_time coord")
+        ts = np.datetime64(valid_time.values).astype("datetime64[s]").astype(int)
+        timestamp = datetime.fromtimestamp(ts, tz=UTC)
 
     return PrecipField(values=values_mm_h, lats=lats, lons=lons, timestamp=timestamp)
 
