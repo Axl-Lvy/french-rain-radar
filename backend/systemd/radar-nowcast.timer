@@ -1,9 +1,10 @@
 [Unit]
-Description=Run nowcast every 5 minutes (offset 1 min after radar-ingest)
+Description=Run pysteps nowcast 2 min after each radar-ingest slot
 
 [Timer]
-OnBootSec=3min
-OnUnitActiveSec=5min
+# Fire at HH:02:30, HH:07:30, ... — 2 min after the matching radar-ingest slot
+# so radar-ingest has had time to download + render the new observed frame.
+OnCalendar=*-*-* *:2/5:30
 AccuracySec=15s
 Persistent=true
 

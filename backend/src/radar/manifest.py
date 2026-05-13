@@ -63,3 +63,19 @@ def read_manifest(path: Path) -> dict[str, Any]:
     manifest = json.loads(path.read_text())
     validate_manifest(manifest)
     return manifest
+
+
+def most_recent_timestamp(manifest: dict[str, Any], layer: str) -> datetime | None:
+    """Return the timestamp of the newest frame in ``manifest['layers'][layer]``.
+
+    Used by ingest commands to dedup against the publisher: if Météo-France's
+    latest available frame timestamp equals this, there is no new data to
+    download and the call can exit early.
+
+    Returns ``None`` when the layer is missing or empty.
+    """
+    frames = manifest.get("layers", {}).get(layer, {}).get("frames", [])
+    if not frames:
+        return None
+    latest = max(f["timestamp"] for f in frames)
+    return datetime.fromisoformat(latest.replace("Z", "+00:00"))

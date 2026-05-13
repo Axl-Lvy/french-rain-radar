@@ -1,9 +1,10 @@
 [Unit]
-Description=Run radar ingest every 5 minutes
+Description=Run radar ingest aligned to Météo-France 5-minute publish slots
 
 [Timer]
-OnBootSec=2min
-OnUnitActiveSec=5min
+# Fire at HH:00:30, HH:05:30, ... — 30 s after each 5-min mark so the new
+# radar mosaic frame has been published by Météo-France before we ask for it.
+OnCalendar=*-*-* *:0/5:30
 AccuracySec=15s
 Persistent=true
 

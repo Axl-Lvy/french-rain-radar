@@ -1,8 +1,9 @@
 [Unit]
-Description=Run AROME-NWC ingest hourly (HH:05 UTC, so the previous hour's run is published)
+Description=Run AROME-PI / AROME-NWC ingest hourly at HH:10 UTC
 
 [Timer]
-OnCalendar=*-*-* *:05:00
+# Fire at HH:10:00 — AROME-PI runs at HH:00, files typically appear by HH:05-HH:10.
+OnCalendar=*-*-* *:10:00
 AccuracySec=1min
 Persistent=true
 
