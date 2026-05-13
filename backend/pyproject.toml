@@ -21,6 +21,8 @@ dependencies = [
     "structlog>=24.4",
     "typer>=0.15",
     "check-jsonschema>=0.30",
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
 ]
 
 [project.optional-dependencies]

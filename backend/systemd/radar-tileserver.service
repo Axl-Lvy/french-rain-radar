@@ -1,0 +1,22 @@
+[Unit]
+Description=French rain radar — lazy XYZ tile renderer (FastAPI/uvicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=radar
+Group=radar
+WorkingDirectory=/opt/radar
+EnvironmentFile=/etc/radar/env
+ExecStart=/opt/radar/backend/.venv/bin/radar tile-server
+Restart=on-failure
+RestartSec=3s
+Nice=10
+ProtectSystem=strict
+ReadWritePaths=/var/lib/radar
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

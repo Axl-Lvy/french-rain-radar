@@ -1,20 +1,19 @@
 # Production Caddyfile — installs to /etc/caddy/Caddyfile.
 # Requires the caddy-ratelimit module (see backend/deploy/install.sh).
+#
+# Layout:
+#   - /manifest.json         -> static file at /var/lib/radar/tiles/manifest.json
+#   - /<layer>/<ts>/<z>/<x>/<y>.png
+#         cache hit -> static file at /var/lib/radar/tiles/cache/<layer>/...
+#         cache miss -> reverse_proxy to the tile-server (radar tile-server)
+#                       which renders, writes the PNG to the cache, and returns it
 
 {
-    # Used by Let's Encrypt for expiry warnings. Remove if you'd rather stay anonymous.
     email axel.levy98@gmail.com
 }
 
 radar.yourdomain.tld {
     encode gzip zstd
-    root * /var/lib/radar/tiles
-
-    @manifest path /manifest.json
-    header @manifest Cache-Control "no-cache, max-age=10"
-
-    @png path *.png
-    header @png Cache-Control "public, max-age=300, immutable"
 
     basic_auth {
         # Generate with:  caddy hash-password
@@ -30,10 +29,30 @@ radar.yourdomain.tld {
         }
     }
 
-    file_server
+    # Manifest: static, frequently updated.
+    @manifest path /manifest.json
+    handle @manifest {
+        root * /var/lib/radar/tiles
+        header Cache-Control "no-cache, max-age=10"
+        file_server
+    }
 
-    # Log to journald by default (visible via `journalctl -u caddy`).
-    # For a separate file destination, swap in a `log { output file ... }` block
-    # and ensure /var/log/caddy is writable by the caddy user.
+    # Tile path: try cache first, fall back to render service.
+    @tile path_regexp tilepath ^/(radar|nowcast|forecast)/[^/]+/\d+/\d+/\d+\.png$
+    handle @tile {
+        root * /var/lib/radar/tiles/cache
+        header Cache-Control "public, max-age=300, immutable"
+
+        @cached file
+        handle @cached {
+            file_server
+        }
+        # Cache miss -> ask the tile server.
+        reverse_proxy 127.0.0.1:8765 {
+            header_up Host {host}
+            transport http { keepalive 60s }
+        }
+    }
+
     log
 }

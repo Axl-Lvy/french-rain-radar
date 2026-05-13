@@ -15,6 +15,8 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+MANIFEST_VERSION = 2
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCHEMA_PATH = REPO_ROOT / "schema" / "manifest.schema.json"
 
@@ -28,28 +30,22 @@ def validate_manifest(manifest: dict[str, Any]) -> None:
     Draft202012Validator(load_schema()).validate(manifest)
 
 
-def empty_manifest(*, bbox: dict[str, float], tile_size: dict[str, int], color_scale: str) -> dict[str, Any]:
+def empty_manifest(*, bbox: dict[str, float], color_scale: str) -> dict[str, Any]:
     """Return a fresh, valid manifest with no frames."""
     return {
-        "manifestVersion": 1,
+        "manifestVersion": MANIFEST_VERSION,
         "generatedAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "bbox": bbox,
-        "tileSize": tile_size,
         "colorScale": color_scale,
-        "layers": {
-            "radar":    {"frames": []},
-            "nowcast":  {"frames": []},
-            "forecast": {"frames": []},
-        },
+        "layers": {},
     }
 
 
 def write_manifest(path: Path, manifest: dict[str, Any]) -> None:
     """Validate and write ``manifest`` to ``path`` atomically.
 
-    The resulting file is mode 0644 so Caddy (running as the ``caddy`` user)
-    can read what the ``radar`` user writes. ``tempfile.mkstemp`` defaults
-    to 0600, so we explicitly chmod before the atomic rename.
+    Mode 0644 so Caddy (running as the ``caddy`` user) can read what the
+    ``radar`` user writes.
     """
     validate_manifest(manifest)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -85,3 +81,57 @@ def most_recent_timestamp(manifest: dict[str, Any], layer: str) -> datetime | No
         return None
     latest = max(f["timestamp"] for f in frames)
     return datetime.fromisoformat(latest.replace("Z", "+00:00"))
+
+
+def upsert_layer_frame(
+    manifest: dict[str, Any],
+    layer: str,
+    *,
+    timestamp: datetime,
+    tile_url_template: str,
+    min_zoom: int,
+    max_zoom: int,
+) -> None:
+    """Idempotently add a frame to a layer, keeping frames sorted."""
+    lyr = manifest["layers"].setdefault(layer, {
+        "tileUrlTemplate": tile_url_template,
+        "minZoom": min_zoom,
+        "maxZoom": max_zoom,
+        "frames": [],
+    })
+    lyr["tileUrlTemplate"] = tile_url_template
+    lyr["minZoom"] = min_zoom
+    lyr["maxZoom"] = max_zoom
+
+    ts_iso = timestamp.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    existing = {f["timestamp"] for f in lyr["frames"]}
+    if ts_iso not in existing:
+        lyr["frames"].append({"timestamp": ts_iso})
+    lyr["frames"].sort(key=lambda f: f["timestamp"])
+
+
+def replace_layer_frames(
+    manifest: dict[str, Any],
+    layer: str,
+    *,
+    timestamps: list[datetime],
+    tile_url_template: str,
+    min_zoom: int,
+    max_zoom: int,
+    run_time: datetime | None = None,
+) -> None:
+    """Replace a layer's frame list (used by ingest-arome with a fresh run)."""
+    lyr = manifest["layers"].setdefault(layer, {})
+    lyr["tileUrlTemplate"] = tile_url_template
+    lyr["minZoom"] = min_zoom
+    lyr["maxZoom"] = max_zoom
+    if run_time is not None:
+        lyr["runTime"] = run_time.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    lyr["frames"] = [
+        {"timestamp": t.astimezone(UTC).isoformat().replace("+00:00", "Z")}
+        for t in sorted(timestamps)
+    ]
+
+
+def touch_generated_at(manifest: dict[str, Any]) -> None:
+    manifest["generatedAt"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")

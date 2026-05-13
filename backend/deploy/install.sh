@@ -31,7 +31,7 @@ command -v uv >/dev/null 2>&1 || { echo "uv install failed" >&2; exit 1; }
 
 echo "[3/8] user + paths..."
 id -u radar >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin radar
-install -d -o radar -g radar /var/lib/radar/tiles /var/log/caddy
+install -d -o radar -g radar /var/lib/radar/tiles /var/lib/radar/tiles/sources /var/lib/radar/tiles/cache /var/log/caddy
 install -d /etc/radar
 
 echo "[4/8] backend deps..."
@@ -51,6 +51,7 @@ install -m 644 "$REPO_ROOT/backend/systemd/"*.service /etc/systemd/system/
 install -m 644 "$REPO_ROOT/backend/systemd/"*.timer   /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now radar-ingest.timer radar-nowcast.timer arome-ingest.timer radar-cleanup.timer
+systemctl enable --now radar-tileserver.service
 
 echo "[7/8] Caddy with rate-limit module..."
 if ! command -v caddy >/dev/null 2>&1; then

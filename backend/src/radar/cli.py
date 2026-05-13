@@ -1,10 +1,14 @@
-"""Command-line entry point. Each subcommand is what its matching systemd timer calls."""
+"""Command-line entry point. Each subcommand is what its matching systemd timer calls.
+
+Ingest commands only **download the source** (GRIB / HDF5) and update the
+manifest with the available timestamps; tile rendering happens on demand via
+``radar tile-server``.
+"""
 
 from __future__ import annotations
 
 import logging
 import sys
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -14,9 +18,13 @@ import typer
 from . import __version__
 from .config import Bbox, Settings, get_settings
 from .manifest import (
+    MANIFEST_VERSION,
     empty_manifest,
     most_recent_timestamp,
     read_manifest,
+    replace_layer_frames,
+    touch_generated_at,
+    upsert_layer_frame,
     write_manifest,
 )
 
@@ -47,52 +55,50 @@ def version() -> None:
     typer.echo(__version__)
 
 
+# ----- shared helpers -----------------------------------------------------
+
+
 def _bbox_tuple(b: Bbox) -> tuple[float, float, float, float]:
-    """Return (lon_min, lat_min, lon_max, lat_max) for the WCS subset convention."""
     return (b.lon_min, b.lat_min, b.lon_max, b.lat_max)
 
 
-def _png_filename(ts: datetime) -> str:
-    """File-system-safe ISO timestamp (no colons)."""
-    return ts.astimezone(UTC).strftime("%Y-%m-%dT%H-%M-%SZ.png")
+def _ts_url(ts: datetime) -> str:
+    """URL-safe ISO timestamp: ``YYYY-MM-DDTHH-MM-SSZ`` (no colons)."""
+    return ts.astimezone(UTC).strftime("%Y-%m-%dT%H-%M-%SZ")
+
+
+def _source_path(settings: Settings, layer: str, ts: datetime, suffix: str) -> Path:
+    return settings.tile_dir / "sources" / layer / f"{_ts_url(ts)}{suffix}"
 
 
 def _load_or_init_manifest(settings: Settings) -> tuple[Path, dict]:
     manifest_path = settings.tile_dir / "manifest.json"
     if manifest_path.exists():
-        return manifest_path, read_manifest(manifest_path)
+        try:
+            m = read_manifest(manifest_path)
+            if m.get("manifestVersion") == MANIFEST_VERSION:
+                return manifest_path, m
+            log.warning("manifest.version-mismatch.rebuilding", saw=m.get("manifestVersion"))
+        except Exception as e:
+            log.warning("manifest.invalid.rebuilding", error=str(e))
     bbox = {
         "latMin": settings.bbox.lat_min, "latMax": settings.bbox.lat_max,
         "lonMin": settings.bbox.lon_min, "lonMax": settings.bbox.lon_max,
     }
-    tile_size = {"width": settings.tile_width, "height": settings.tile_height}
-    return manifest_path, empty_manifest(
-        bbox=bbox, tile_size=tile_size, color_scale=settings.color_scale,
-    )
+    return manifest_path, empty_manifest(bbox=bbox, color_scale=settings.color_scale)
 
 
-def _replace_frames(manifest: dict, layer: str, frames: list[dict]) -> None:
-    manifest["layers"].setdefault(layer, {"frames": []})["frames"] = sorted(
-        frames, key=lambda f: f["timestamp"]
-    )
-    manifest["generatedAt"] = (
-        datetime.now(UTC).isoformat().replace("+00:00", "Z")
-    )
+# ----- ingest commands ---------------------------------------------------
 
 
 @app.command("ingest-radar")
 def ingest_radar() -> None:
-    """Fetch the latest radar mosaic, render PNG, update manifest.
+    """Download the latest radar mosaic HDF5 to the source cache, update manifest.
 
     Idempotent: if Météo-France's latest frame is the one already in the
     manifest, this exits without downloading the payload.
     """
-    from .colormap import colorize
-    from .manifest import write_manifest
     from .meteofrance import MeteoFranceClient
-    from .radar_hdf5 import mm_per_window_to_mm_per_hour, read_mosaic
-    from .render import write_png
-    from .reproject import build_proj_grid, resample
 
     settings = get_settings()
     manifest_path, manifest = _load_or_init_manifest(settings)
@@ -104,76 +110,31 @@ def ingest_radar() -> None:
     ) as mf:
         new_validity = mf.latest_radar_validity()
         if new_validity is None:
-            log.warning("radar descriptor has no validity_time; skipping")
+            log.warning("radar.descriptor.no-validity-time")
             return
         if known_latest and new_validity <= known_latest:
             log.info("radar.skip.same-validity", validity=new_validity.isoformat())
             return
 
-        # Heavy fetch (HDF5, ~2 MB).
-        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as tmp:
-            tmp_path = Path(tmp.name)
-        try:
-            frame = mf.fetch_latest_radar(dest=tmp_path)
-            mosaic = read_mosaic(frame.path)
-        finally:
-            tmp_path.unlink(missing_ok=True)
+        dest = _source_path(settings, "radar", new_validity, ".h5")
+        mf.fetch_latest_radar(dest=dest)
 
-    # Source-grid origin in projected metres = projected UL corner.
-    from pyproj import Transformer
-    to_src = Transformer.from_crs("EPSG:4326", mosaic.proj_def, always_xy=True)
-    ul_x, ul_y = to_src.transform(mosaic.ul_lon, mosaic.ul_lat)
-
-    grid = build_proj_grid(
-        settings.bbox,
-        width=settings.tile_width,
-        height=settings.tile_height,
-        src_crs=mosaic.proj_def,
-        src_origin_x=ul_x,
-        src_origin_y=ul_y,
-        src_xscale=mosaic.x_scale,
-        src_yscale=mosaic.y_scale,
-        src_shape=mosaic.values.shape,
+    upsert_layer_frame(
+        manifest, "radar",
+        timestamp=new_validity,
+        tile_url_template="radar/{timestamp}/{z}/{x}/{y}.png",
+        min_zoom=settings.min_zoom,
+        max_zoom=settings.max_zoom,
     )
-    mm_h = resample(mosaic.values * mm_per_window_to_mm_per_hour(5), grid)
-    rgba = colorize(mm_h, scale=settings.color_scale)
-
-    png_rel = f"radar/{_png_filename(mosaic.timestamp)}"
-    png_abs = settings.tile_dir / png_rel
-    write_png(rgba, png_abs)
-
-    existing = [f for f in manifest["layers"].get("radar", {}).get("frames", [])
-                if f["url"] != png_rel]
-    existing.append({
-        "timestamp": mosaic.timestamp.isoformat().replace("+00:00", "Z"),
-        "url": png_rel,
-    })
-    _replace_frames(manifest, "radar", existing)
+    touch_generated_at(manifest)
     write_manifest(manifest_path, manifest)
-    log.info("radar.frame.written", validity=mosaic.timestamp.isoformat(), url=png_rel)
-
-
-@app.command("nowcast")
-def nowcast() -> None:
-    """Run pysteps optical-flow extrapolation on the latest radar frames.
-
-    No network call. Requires the optional ``nowcast`` extra (pysteps).
-    """
-    typer.echo("TODO: implement pysteps extrapolation in a follow-up commit")
+    log.info("radar.frame.saved", validity=new_validity.isoformat(), path=str(dest))
 
 
 @app.command("ingest-arome")
 def ingest_arome() -> None:
-    """Fetch the latest AROME-PI run and render its 24 lead-time forecast PNGs.
-
-    Idempotent against the run reference time.
-    """
-    from .colormap import colorize
-    from .grib import read_precip
-    from .manifest import write_manifest
+    """Download the latest AROME-PI run (24 lead-time GRIBs) and update manifest."""
     from .meteofrance import AROME_LEAD_TIMES_S, MeteoFranceClient
-    from .render import write_png
-    from .reproject import build_grid, resample
 
     settings = get_settings()
     manifest_path, manifest = _load_or_init_manifest(settings)
@@ -188,51 +149,55 @@ def ingest_arome() -> None:
             return
 
         run_iso = latest_run.isoformat().replace("+00:00", "Z")
-        existing_run = manifest["layers"].get("forecast", {}).get("runTime")
+        existing_run = manifest.get("layers", {}).get("forecast", {}).get("runTime")
         if existing_run == run_iso:
             log.info("arome.skip.same-run", run=run_iso)
             return
 
-        new_frames: list[dict] = []
-        with tempfile.TemporaryDirectory() as td:
-            tmp = Path(td)
-            for forecast in mf.fetch_arome_run(
-                latest_run,
-                bbox=_bbox_tuple(settings.bbox),
-                dest_dir=tmp,
-                lead_times_s=AROME_LEAD_TIMES_S,
-            ):
-                field = read_precip(forecast.path)
-                # AROME-PI is already on a regular lat/lon grid; use the simple builder.
-                grid = build_grid(
-                    settings.bbox,
-                    width=settings.tile_width,
-                    height=settings.tile_height,
-                    src_lats=field.lats[::-1] if field.lats[0] > field.lats[-1] else field.lats,
-                    src_lons=field.lons,
-                )
-                values = field.values[::-1] if field.lats[0] > field.lats[-1] else field.values
-                mm_h = resample(values, grid)
-                rgba = colorize(mm_h, scale=settings.color_scale)
-                png_rel = f"forecast/{_png_filename(forecast.valid_time)}"
-                write_png(rgba, settings.tile_dir / png_rel)
-                new_frames.append({
-                    "timestamp": forecast.valid_time.isoformat().replace("+00:00", "Z"),
-                    "url": png_rel,
-                })
+        # Fetch all 24 leadtime GRIBs into the per-run source dir.
+        valid_times: list[datetime] = []
+        for forecast in mf.fetch_arome_run(
+            latest_run,
+            bbox=_bbox_tuple(settings.bbox),
+            dest_dir=settings.tile_dir / "sources" / "forecast",
+            lead_times_s=AROME_LEAD_TIMES_S,
+        ):
+            # Rename to the URL-safe pattern so tile server can find it.
+            target = _source_path(settings, "forecast", forecast.valid_time, ".grib2")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if target != forecast.path:
+                forecast.path.rename(target)
+            valid_times.append(forecast.valid_time)
 
-    _replace_frames(manifest, "forecast", new_frames)
-    manifest["layers"]["forecast"]["runTime"] = run_iso
+    replace_layer_frames(
+        manifest, "forecast",
+        timestamps=valid_times,
+        tile_url_template="forecast/{timestamp}/{z}/{x}/{y}.png",
+        min_zoom=settings.min_zoom,
+        max_zoom=settings.max_zoom,
+        run_time=latest_run,
+    )
+    touch_generated_at(manifest)
     write_manifest(manifest_path, manifest)
-    log.info("arome.run.written", run=run_iso, frames=len(new_frames))
+    log.info("arome.run.saved", run=run_iso, frames=len(valid_times))
+
+
+@app.command("nowcast")
+def nowcast() -> None:
+    """Run pysteps optical-flow extrapolation on the latest radar frames.
+
+    Requires the optional ``nowcast`` extra (pysteps). Not yet implemented.
+    """
+    typer.echo("TODO: implement pysteps extrapolation (Phase 1 follow-up)")
+
+
+# ----- maintenance --------------------------------------------------------
 
 
 @app.command()
 def cleanup() -> None:
-    """Delete frames older than the retention window."""
-    from datetime import timedelta
-
-    from .retention import cleanup_layer
+    """Delete sources + cached tiles older than the retention window, and trim the manifest."""
+    from .retention import cleanup_layer_v2
 
     settings = get_settings()
     manifest_path = settings.tile_dir / "manifest.json"
@@ -240,23 +205,28 @@ def cleanup() -> None:
         typer.echo(f"no manifest at {manifest_path}; nothing to clean")
         return
     manifest = read_manifest(manifest_path)
-    max_age = timedelta(hours=settings.retention_hours)
-    total = sum(cleanup_layer(settings.tile_dir, layer, max_age, manifest)
-                for layer in ("radar", "nowcast", "forecast"))
+    total = 0
+    for layer in ("radar", "nowcast", "forecast"):
+        total += cleanup_layer_v2(
+            tile_dir=settings.tile_dir,
+            layer=layer,
+            max_age_hours=settings.retention_hours,
+            manifest=manifest,
+        )
+    touch_generated_at(manifest)
     write_manifest(manifest_path, manifest)
     typer.echo(f"removed {total} stale frames")
 
 
 @app.command("init-manifest")
 def init_manifest() -> None:
-    """Write an empty, valid manifest at the configured tile dir."""
+    """Write a fresh empty manifest at the configured tile dir."""
     settings = get_settings()
     bbox = {
         "latMin": settings.bbox.lat_min, "latMax": settings.bbox.lat_max,
         "lonMin": settings.bbox.lon_min, "lonMax": settings.bbox.lon_max,
     }
-    tile_size = {"width": settings.tile_width, "height": settings.tile_height}
-    manifest = empty_manifest(bbox=bbox, tile_size=tile_size, color_scale=settings.color_scale)
+    manifest = empty_manifest(bbox=bbox, color_scale=settings.color_scale)
     target = settings.tile_dir / "manifest.json"
     write_manifest(target, manifest)
     typer.echo(f"wrote empty manifest at {target}")
@@ -265,8 +235,29 @@ def init_manifest() -> None:
 @app.command("validate-manifest")
 def validate_manifest_cmd(path: Path) -> None:
     """Validate a manifest file against the JSON schema."""
-    read_manifest(path)  # raises on invalid
+    read_manifest(path)
     typer.echo(f"{path}: OK")
+
+
+# ----- tile server --------------------------------------------------------
+
+
+@app.command("tile-server")
+def tile_server_cmd(
+    host: str | None = typer.Option(None, help="Override RADAR_TILE_SERVER_HOST"),
+    port: int | None = typer.Option(None, help="Override RADAR_TILE_SERVER_PORT"),
+) -> None:
+    """Run the lazy tile-rendering HTTP server (uvicorn)."""
+    import uvicorn
+
+    settings = get_settings()
+    uvicorn.run(
+        "radar.tile_server:app",
+        host=host or settings.tile_server_host,
+        port=port or settings.tile_server_port,
+        log_config=None,
+        access_log=False,
+    )
 
 
 if __name__ == "__main__":

@@ -17,6 +17,8 @@ install -m 644 "$REPO_ROOT/backend/systemd/"*.service /etc/systemd/system/
 install -m 644 "$REPO_ROOT/backend/systemd/"*.timer   /etc/systemd/system/
 systemctl daemon-reload
 systemctl restart radar-ingest.timer radar-nowcast.timer arome-ingest.timer radar-cleanup.timer
+# tile-server is long-running; restart it so it picks up new code.
+systemctl restart radar-tileserver.service || systemctl start radar-tileserver.service
 
 # Re-install Caddyfile (does not touch passwords if you've edited them in /etc/caddy/Caddyfile directly).
 # Comment this out if you maintain Caddyfile separately.

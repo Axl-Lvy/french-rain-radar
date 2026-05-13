@@ -4,6 +4,7 @@ import eu.yourname.radar.data.Manifest
 import eu.yourname.radar.data.RadarHttpClient
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
 /**
  * Decodes the example manifest into the Kotlin model. Compiled into the source
@@ -14,15 +15,31 @@ import kotlin.test.assertEquals
  */
 private const val EXAMPLE_MANIFEST = """
 {
-  "manifestVersion": 1,
-  "generatedAt": "2026-05-13T14:30:00Z",
-  "bbox": { "latMin": 43.6, "latMax": 44.2, "lonMin": 4.6, "lonMax": 5.6 },
-  "tileSize": { "width": 512, "height": 384 },
+  "manifestVersion": 2,
+  "generatedAt": "2026-05-13T20:57:31Z",
+  "bbox": { "latMin": 41.3, "latMax": 51.5, "lonMin": -5.5, "lonMax": 10.0 },
   "colorScale": "rainviewer-original",
   "layers": {
-    "radar":    { "frames": [{ "timestamp": "2026-05-13T14:25:00Z", "url": "radar/2026-05-13T14-25-00.png" }] },
-    "nowcast":  { "frames": [{ "timestamp": "2026-05-13T14:30:00Z", "url": "nowcast/2026-05-13T14-30-00.png" }] },
-    "forecast": { "frames": [{ "timestamp": "2026-05-13T15:30:00Z", "url": "forecast/2026-05-13T15-30-00.png" }] }
+    "radar": {
+      "tileUrlTemplate": "radar/{timestamp}/{z}/{x}/{y}.png",
+      "minZoom": 5,
+      "maxZoom": 10,
+      "frames": [
+        { "timestamp": "2026-05-13T20:50:00Z" },
+        { "timestamp": "2026-05-13T20:55:00Z" }
+      ]
+    },
+    "forecast": {
+      "tileUrlTemplate": "forecast/{timestamp}/{z}/{x}/{y}.png",
+      "minZoom": 5,
+      "maxZoom": 10,
+      "runTime": "2026-05-13T20:00:00Z",
+      "frames": [
+        { "timestamp": "2026-05-13T20:15:00Z" },
+        { "timestamp": "2026-05-13T20:30:00Z" },
+        { "timestamp": "2026-05-13T20:45:00Z" }
+      ]
+    }
   }
 }
 """
@@ -31,9 +48,14 @@ class ManifestSchemaConsistencyTest {
     @Test
     fun example_manifest_decodes() {
         val m = RadarHttpClient.json.decodeFromString(Manifest.serializer(), EXAMPLE_MANIFEST)
-        assertEquals(1, m.manifestVersion)
-        assertEquals(43.6, m.bbox.latMin)
-        assertEquals(512, m.tileSize.width)
-        assertEquals(1, m.layers.radar?.frames?.size)
+        assertEquals(2, m.manifestVersion)
+        assertEquals(41.3, m.bbox.latMin)
+        val radar = m.layers.radar
+        assertNotNull(radar)
+        assertEquals("radar/{timestamp}/{z}/{x}/{y}.png", radar.tileUrlTemplate)
+        assertEquals(5, radar.minZoom)
+        assertEquals(10, radar.maxZoom)
+        assertEquals(2, radar.frames.size)
+        assertNotNull(m.layers.forecast?.runTime)
     }
 }

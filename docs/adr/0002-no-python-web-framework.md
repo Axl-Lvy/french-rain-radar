@@ -1,6 +1,6 @@
 # ADR 0002 — No Python web framework
 
-**Status:** Accepted
+**Status:** Partially superseded by [ADR 0004](0004-lazy-tile-server.md). The "no Python web framework" stance held for the pre-render era; once the product required deep-zoom support over all of France, a small FastAPI tile renderer was introduced behind Caddy.
 **Date:** 2026-05-13
 
 ## Context
