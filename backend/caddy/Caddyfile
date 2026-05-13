@@ -12,8 +12,28 @@
     email axel.levy98@gmail.com
 }
 
-radar.yourdomain.tld {
+rain.axl-lvy.fr {
     encode gzip zstd
+
+    # rate_limit runs before basic_auth (caddy-ratelimit hooks early). The
+    # per_ip zone caps unauthenticated brute-force at 60 attempts / IP / min;
+    # the per_user zone keeps the 1200 / user / min budget for legitimate
+    # tile-heavy clients.
+    rate_limit {
+        # per_ip catches brute-force from unauthenticated probes (no user.id yet)
+        # while leaving enough headroom for a legitimate tile-heavy scrub
+        # (a single timeline jump can fire 50+ tile requests from one client).
+        zone per_ip {
+            key {remote_host}
+            events 600
+            window 1m
+        }
+        zone per_user {
+            key {http.auth.user.id}
+            events 1200
+            window 1m
+        }
+    }
 
     basic_auth {
         # Generate with:  caddy hash-password
@@ -21,12 +41,10 @@ radar.yourdomain.tld {
         alice $2a$14$REPLACE_WITH_REAL_BCRYPT_HASH...........................
     }
 
-    rate_limit {
-        zone tiles {
-            key {http.auth.user.id}
-            events 1200
-            window 1m
-        }
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
     }
 
     # Manifest: static, frequently updated.

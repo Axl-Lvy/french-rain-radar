@@ -19,10 +19,10 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from xml.etree import ElementTree as ET
 
 import httpx
 import structlog
+from defusedxml.ElementTree import iterparse as _safe_iterparse
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 log = structlog.get_logger(__name__)
@@ -111,7 +111,7 @@ class MeteoFranceClient:
         """Parse GetCapabilities to find the most recent AROME-PI run time."""
         xml = capabilities or self.get_arome_capabilities()
         latest: datetime | None = None
-        for _, elem in ET.iterparse(_BytesReader(xml), events=("end",)):
+        for _, elem in _safe_iterparse(_BytesReader(xml), events=("end",)):
             if elem.tag.endswith("}CoverageId"):
                 m = _AROME_COVERAGE_RE.match(elem.text or "")
                 if m:
@@ -161,8 +161,10 @@ class MeteoFranceClient:
         if r.status_code == 404:
             return None
         if r.status_code != 200:
+            log.debug("arome.getcoverage.error.body", body=r.text[:500])
             raise RuntimeError(
-                f"AROME-PI GetCoverage failed: HTTP {r.status_code} body={r.text[:500]}"
+                f"AROME-PI GetCoverage failed: HTTP {r.status_code} "
+                f"content-type={r.headers.get('content-type', 'unknown')}"
             )
         if not r.content.startswith(b"GRIB"):
             raise RuntimeError(f"AROME-PI response is not a GRIB: {r.content[:200]!r}")
@@ -241,8 +243,10 @@ class MeteoFranceClient:
             headers={"apikey": self._radar_token},
         )
         if r.status_code != 200:
+            log.debug("radar.produit.error.body", body=r.text[:500])
             raise RuntimeError(
-                f"radar produit failed: HTTP {r.status_code} body={r.text[:500]}"
+                f"radar produit failed: HTTP {r.status_code} "
+                f"content-type={r.headers.get('content-type', 'unknown')}"
             )
         if not r.content.startswith(b"\x89HDF\r\n\x1a\n"):
             raise RuntimeError(f"radar response is not HDF5: magic={r.content[:8]!r}")
