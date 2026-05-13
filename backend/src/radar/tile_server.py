@@ -117,6 +117,12 @@ def get_tile(
     """Render one tile (cached on disk for subsequent identical requests)."""
     if layer not in _LAYERS:
         raise HTTPException(404, "unknown layer")
+    # XYZ tile grid at zoom z has 2**z tiles along each axis; reject anything
+    # outside that range up-front so we don't waste a render + disk write on a
+    # request that can only produce a blank tile, and so attackers can't pollute
+    # the on-disk cache with arbitrary (x, y) combinations.
+    if x >= (1 << z) or y >= (1 << z):
+        raise HTTPException(404, "tile out of range")
     settings = get_settings()
     cache = _cache_path(settings, layer, timestamp, z, x, y)
     if cache.exists():
