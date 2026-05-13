@@ -25,16 +25,25 @@ log = structlog.get_logger(__name__)
 
 
 class MeteoFranceClient:
-    """Thin async/sync client over the Météo-France open-data API."""
+    """Thin sync client over the Météo-France open-data API.
+
+    Two subscriptions are needed:
+    - **AROME-PI** for 0-6 h forecast (WCS endpoint family)
+    - **Radar data** for the observed mosaic
+
+    Each subscription has its own apikey, passed via the ``apikey`` request
+    header. If one portal Application is subscribed to both APIs the same
+    key works for both, but the client keeps them separate so per-API
+    revocation stays possible.
+    """
 
     BASE_URL = "https://public-api.meteofrance.fr"
 
-    def __init__(self, token: str, *, timeout: float = 30.0) -> None:
-        self._token = token
-        self._client = httpx.Client(
-            timeout=timeout,
-            headers={"apikey": token, "Accept": "application/octet-stream"},
-        )
+    def __init__(self, *, arome_token: str, radar_token: str, timeout: float = 30.0) -> None:
+        self._arome_token = arome_token
+        self._radar_token = radar_token
+        self._timeout = timeout
+        self._client = httpx.Client(timeout=timeout, headers={"Accept": "application/octet-stream"})
 
     def close(self) -> None:
         self._client.close()
@@ -51,13 +60,18 @@ class MeteoFranceClient:
     def fetch_latest_radar(self, *, dest: Path) -> datetime:
         """Download the latest radar mosaic GRIB2 to ``dest``.
 
-        Returns the observation timestamp parsed from the response or filename.
+        Uses the ``radar_token`` apikey. Returns the observation timestamp
+        parsed from the response or filename.
         """
-        raise NotImplementedError("TODO: implement against current PRECIP-FRANCE endpoint")
+        raise NotImplementedError("TODO: implement against the Radar data WCS GetCoverage endpoint")
 
-    # ------------------------------------------------------------------ AROME
+    # ------------------------------------------------------------------ AROME-PI
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=20))
-    def fetch_latest_arome_nwc(self, *, dest_dir: Path) -> list[Path]:
-        """Download the latest AROME-NWC run; returns the per-leadtime GRIB files."""
-        raise NotImplementedError("TODO: implement against current AROME-NWC endpoint")
+    def fetch_latest_arome_pi(self, *, dest_dir: Path) -> list[Path]:
+        """Download the latest AROME-PI run; returns the per-leadtime GRIB files.
+
+        Uses the ``arome_token`` apikey. Endpoint:
+        ``/wcs/MF-NWP-HIGHRES-AROMEPI-001-FRANCE-WCS/GetCoverage``.
+        """
+        raise NotImplementedError("TODO: implement against the AROME-PI WCS GetCoverage endpoint")

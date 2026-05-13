@@ -29,7 +29,12 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="RADAR_", extra="ignore", env_file=None)
 
-    meteofrance_token: str = Field(default="", validation_alias="METEOFRANCE_TOKEN")
+    # Météo-France issues one API key per subscription. We use two APIs
+    # (AROME-PI for forecast, Radar for observation), so two tokens. If your
+    # portal application is subscribed to both APIs, the same string works
+    # for both — just set both variables to the same value.
+    meteofrance_token_arome: str = Field(default="", validation_alias="METEOFRANCE_TOKEN_AROME")
+    meteofrance_token_radar: str = Field(default="", validation_alias="METEOFRANCE_TOKEN_RADAR")
     tile_dir: Path = Path("dev/data/tiles")
     retention_hours: int = 12
     tile_width: int = 512
