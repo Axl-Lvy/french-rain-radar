@@ -131,13 +131,13 @@ class MeteoFranceClient:
         *,
         bbox: tuple[float, float, float, float],
         dest_dir: Path,
-    ) -> AromeForecastFrame:
+    ) -> AromeForecastFrame | None:
         """Download one AROME-PI lead-time GRIB2 to ``dest_dir``.
 
-        Args:
-            run_time: UTC reference time of the run.
-            lead_seconds: lead time in seconds (member of ``AROME_LEAD_TIMES_S``).
-            bbox: (lon_min, lat_min, lon_max, lat_max) in WGS84.
+        Returns ``None`` if the leadtime is not yet published (HTTP 404). The
+        model trickles out leadtimes incrementally during the hour following
+        the run reference time, so a 404 here is normal early in the run and
+        is **not** retried; transient errors (5xx, network) still retry.
         """
         run_label = run_time.astimezone(UTC).strftime("%Y-%m-%dT%H.%M.%SZ")
         coverage_id = (
@@ -158,6 +158,8 @@ class MeteoFranceClient:
             params=params,
             headers={"apikey": self._arome_token},
         )
+        if r.status_code == 404:
+            return None
         if r.status_code != 200:
             raise RuntimeError(
                 f"AROME-PI GetCoverage failed: HTTP {r.status_code} body={r.text[:500]}"
@@ -184,11 +186,15 @@ class MeteoFranceClient:
         dest_dir: Path,
         lead_times_s: tuple[int, ...] = AROME_LEAD_TIMES_S,
     ) -> Iterator[AromeForecastFrame]:
-        """Yield all lead-time frames for a given AROME-PI run (sequential)."""
+        """Yield available lead-time frames for a run, skipping any 404 (pending) ones."""
         for lead in lead_times_s:
-            yield self.fetch_arome_leadtime(
+            frame = self.fetch_arome_leadtime(
                 run_time, lead, bbox=bbox, dest_dir=dest_dir
             )
+            if frame is None:
+                log.info("arome.leadtime.pending", run=run_time.isoformat(), lead_s=lead)
+                continue
+            yield frame
 
     # =================================================================== RADAR
 

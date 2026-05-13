@@ -133,7 +133,20 @@ def ingest_radar() -> None:
 
 @app.command("ingest-arome")
 def ingest_arome() -> None:
-    """Download the latest AROME-PI run (24 lead-time GRIBs) and update manifest."""
+    """Download the latest AROME-PI run and update manifest.
+
+    Handles two cases:
+
+    - **New run**: drop all previous forecast sources + cached tiles, then
+      fetch every published leadtime (404s for unpublished leadtimes are
+      silently skipped).
+    - **Same run, partial**: top up — only fetch leadtimes whose source file
+      isn't already on disk. Useful because AROME-PI publishes leadtimes
+      incrementally over the hour after the run reference time.
+    """
+    import shutil
+    from datetime import timedelta
+
     from .meteofrance import AROME_LEAD_TIMES_S, MeteoFranceClient
 
     settings = get_settings()
@@ -150,24 +163,34 @@ def ingest_arome() -> None:
 
         run_iso = latest_run.isoformat().replace("+00:00", "Z")
         existing_run = manifest.get("layers", {}).get("forecast", {}).get("runTime")
-        if existing_run == run_iso:
-            log.info("arome.skip.same-run", run=run_iso)
-            return
+        new_run = existing_run != run_iso
 
-        # Fetch all 24 leadtime GRIBs into the per-run source dir.
+        if new_run:
+            log.info("arome.new-run", run=run_iso, previous=existing_run)
+            shutil.rmtree(settings.tile_dir / "sources" / "forecast", ignore_errors=True)
+            shutil.rmtree(settings.tile_dir / "cache" / "forecast", ignore_errors=True)
+        else:
+            log.info("arome.top-up", run=run_iso)
+
+        forecast_src_dir = settings.tile_dir / "sources" / "forecast"
+        forecast_src_dir.mkdir(parents=True, exist_ok=True)
         valid_times: list[datetime] = []
-        for forecast in mf.fetch_arome_run(
-            latest_run,
-            bbox=_bbox_tuple(settings.bbox),
-            dest_dir=settings.tile_dir / "sources" / "forecast",
-            lead_times_s=AROME_LEAD_TIMES_S,
-        ):
-            # Rename to the URL-safe pattern so tile server can find it.
-            target = _source_path(settings, "forecast", forecast.valid_time, ".grib2")
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if target != forecast.path:
-                forecast.path.rename(target)
-            valid_times.append(forecast.valid_time)
+        for lead in AROME_LEAD_TIMES_S:
+            valid_time = latest_run + timedelta(seconds=lead)
+            target = _source_path(settings, "forecast", valid_time, ".grib2")
+            if target.exists():
+                valid_times.append(valid_time)
+                continue
+            frame = mf.fetch_arome_leadtime(
+                latest_run, lead,
+                bbox=_bbox_tuple(settings.bbox),
+                dest_dir=forecast_src_dir,
+            )
+            if frame is None:
+                continue
+            if frame.path != target:
+                frame.path.rename(target)
+            valid_times.append(valid_time)
 
     replace_layer_frames(
         manifest, "forecast",
