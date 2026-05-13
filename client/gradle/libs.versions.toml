@@ -1,0 +1,52 @@
+[versions]
+# Bump every group to current-latest-stable when you actually start the project.
+# The values below are 2024-era floors that the layout was designed against.
+kotlin = "2.1.0"
+agp = "8.7.3"
+compose-multiplatform = "1.7.3"
+ktor = "3.0.3"
+serialization = "1.7.3"
+coroutines = "1.10.1"
+datetime = "0.6.1"
+koin = "4.0.0"
+multiplatform-settings = "1.3.0"
+voyager = "1.1.0-beta03"
+maplibre-android = "11.8.1"
+androidx-activity-compose = "1.9.3"
+android-min-sdk = "26"
+android-target-sdk = "35"
+android-compile-sdk = "35"
+
+[libraries]
+ktor-core              = { module = "io.ktor:ktor-client-core",                       version.ref = "ktor" }
+ktor-content-neg       = { module = "io.ktor:ktor-client-content-negotiation",        version.ref = "ktor" }
+ktor-json              = { module = "io.ktor:ktor-serialization-kotlinx-json",        version.ref = "ktor" }
+ktor-auth              = { module = "io.ktor:ktor-client-auth",                       version.ref = "ktor" }
+ktor-logging           = { module = "io.ktor:ktor-client-logging",                    version.ref = "ktor" }
+ktor-okhttp            = { module = "io.ktor:ktor-client-okhttp",                     version.ref = "ktor" }
+ktor-darwin            = { module = "io.ktor:ktor-client-darwin",                     version.ref = "ktor" }
+ktor-js                = { module = "io.ktor:ktor-client-js",                         version.ref = "ktor" }
+
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
+kotlinx-coroutines-core    = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core",    version.ref = "coroutines" }
+kotlinx-datetime           = { module = "org.jetbrains.kotlinx:kotlinx-datetime",           version.ref = "datetime" }
+
+koin-core              = { module = "io.insert-koin:koin-core",                       version.ref = "koin" }
+koin-compose           = { module = "io.insert-koin:koin-compose",                    version.ref = "koin" }
+
+multiplatform-settings        = { module = "com.russhwolf:multiplatform-settings",             version.ref = "multiplatform-settings" }
+multiplatform-settings-coro   = { module = "com.russhwolf:multiplatform-settings-coroutines",  version.ref = "multiplatform-settings" }
+
+voyager-navigator      = { module = "cafe.adriel.voyager:voyager-navigator",          version.ref = "voyager" }
+
+maplibre-android       = { module = "org.maplibre.gl:android-sdk",                    version.ref = "maplibre-android" }
+
+androidx-activity-compose = { module = "androidx.activity:activity-compose",          version.ref = "androidx-activity-compose" }
+
+[plugins]
+kotlin-multiplatform   = { id = "org.jetbrains.kotlin.multiplatform",     version.ref = "kotlin" }
+kotlin-serialization   = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+compose-multiplatform  = { id = "org.jetbrains.compose",                  version.ref = "compose-multiplatform" }
+compose-compiler       = { id = "org.jetbrains.kotlin.plugin.compose",    version.ref = "kotlin" }
+android-application    = { id = "com.android.application",                version.ref = "agp" }
+android-library        = { id = "com.android.library",                    version.ref = "agp" }

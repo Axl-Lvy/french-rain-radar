@@ -1,0 +1,85 @@
+# --- OS / editors ---
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.fleet/
+.zed/
+.history/
+
+# --- JetBrains (IntelliJ IDEA, Android Studio, PyCharm, CLion, Rider, etc.) ---
+# We keep .idea/ untracked entirely; per-project shared settings can be
+# allow-listed individually with `!.idea/<file>` if and when the team agrees.
+.idea/
+*.iml
+*.iws
+*.ipr
+.idea_modules/
+cmake-build-*/
+out/
+.shelf/
+atlassian-ide-plugin.xml
+com_crashlytics_export_strings.xml
+crashlytics-build.properties
+crashlytics.properties
+fabric.properties
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.venv/
+venv/
+env/
+.python-version-local
+
+# --- uv ---
+# uv.lock IS checked in (intentional)
+
+# --- Kotlin / Gradle ---
+.gradle/
+.kotlin/
+build/
+out/
+local.properties
+*.hprof
+kotlin-js-store/
+
+# --- Android ---
+*.apk
+*.aab
+*.ap_
+*.dex
+captures/
+
+# --- iOS / Xcode ---
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+DerivedData/
+*.xcworkspace/xcuserdata/
+Pods/
+
+# --- Node (for Wasm tooling cache) ---
+node_modules/
+.yarn/
+
+# --- Local data ---
+/dev/data/
+/var-lib-radar/
+
+# --- Secrets ---
+.env
+.env.local
+*.pem
+*.key

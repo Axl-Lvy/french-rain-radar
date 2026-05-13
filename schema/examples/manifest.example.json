@@ -1,0 +1,33 @@
+{
+  "manifestVersion": 1,
+  "generatedAt": "2026-05-13T14:30:00Z",
+  "bbox": {
+    "latMin": 43.6,
+    "latMax": 44.2,
+    "lonMin": 4.6,
+    "lonMax": 5.6
+  },
+  "tileSize": { "width": 512, "height": 384 },
+  "colorScale": "rainviewer-original",
+  "layers": {
+    "radar": {
+      "frames": [
+        { "timestamp": "2026-05-13T14:15:00Z", "url": "radar/2026-05-13T14-15-00.png" },
+        { "timestamp": "2026-05-13T14:20:00Z", "url": "radar/2026-05-13T14-20-00.png" },
+        { "timestamp": "2026-05-13T14:25:00Z", "url": "radar/2026-05-13T14-25-00.png" }
+      ]
+    },
+    "nowcast": {
+      "frames": [
+        { "timestamp": "2026-05-13T14:30:00Z", "url": "nowcast/2026-05-13T14-30-00.png" },
+        { "timestamp": "2026-05-13T14:35:00Z", "url": "nowcast/2026-05-13T14-35-00.png" }
+      ]
+    },
+    "forecast": {
+      "frames": [
+        { "timestamp": "2026-05-13T15:30:00Z", "url": "forecast/2026-05-13T15-30-00.png" },
+        { "timestamp": "2026-05-13T16:30:00Z", "url": "forecast/2026-05-13T16-30-00.png" }
+      ]
+    }
+  }
+}

@@ -1,0 +1,18 @@
+[Unit]
+Description=Météo-France AROME-NWC forecast ingestion
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=radar
+Group=radar
+WorkingDirectory=/opt/radar
+EnvironmentFile=/etc/radar/env
+ExecStart=/opt/radar/backend/.venv/bin/radar ingest-arome
+Nice=10
+TimeoutStartSec=600
+ProtectSystem=strict
+ReadWritePaths=/var/lib/radar
+PrivateTmp=true
+NoNewPrivileges=true

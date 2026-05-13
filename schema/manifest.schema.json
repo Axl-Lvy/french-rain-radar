@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://radar.example.tld/schema/manifest.schema.json",
+  "title": "Radar manifest",
+  "description": "Manifest describing the currently available radar / nowcast / forecast frames. Written atomically by the backend, polled by the clients.",
+  "type": "object",
+  "required": ["manifestVersion", "generatedAt", "bbox", "tileSize", "layers"],
+  "additionalProperties": false,
+  "properties": {
+    "manifestVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Bump on breaking changes. Clients refuse incompatible versions."
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC ISO-8601 timestamp at which this manifest was written."
+    },
+    "bbox": {
+      "type": "object",
+      "required": ["latMin", "latMax", "lonMin", "lonMax"],
+      "additionalProperties": false,
+      "properties": {
+        "latMin": { "type": "number", "minimum": -90, "maximum": 90 },
+        "latMax": { "type": "number", "minimum": -90, "maximum": 90 },
+        "lonMin": { "type": "number", "minimum": -180, "maximum": 180 },
+        "lonMax": { "type": "number", "minimum": -180, "maximum": 180 }
+      }
+    },
+    "tileSize": {
+      "type": "object",
+      "required": ["width", "height"],
+      "additionalProperties": false,
+      "properties": {
+        "width":  { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "colorScale": {
+      "type": "string",
+      "description": "Identifier of the colour ramp used to render the PNGs. Clients may use it to render a legend."
+    },
+    "layers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "radar":    { "$ref": "#/$defs/layer" },
+        "nowcast":  { "$ref": "#/$defs/layer" },
+        "forecast": { "$ref": "#/$defs/layer" }
+      }
+    }
+  },
+  "$defs": {
+    "layer": {
+      "type": "object",
+      "required": ["frames"],
+      "additionalProperties": false,
+      "properties": {
+        "frames": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/frame" }
+        }
+      }
+    },
+    "frame": {
+      "type": "object",
+      "required": ["timestamp", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC ISO-8601 timestamp the frame represents (valid time for forecast frames, observation time for radar)."
+        },
+        "url": {
+          "type": "string",
+          "description": "Path relative to the manifest URL pointing to the PNG tile."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily cleanup of stale radar PNGs
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+AccuracySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

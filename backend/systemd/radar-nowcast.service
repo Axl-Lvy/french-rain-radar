@@ -1,0 +1,18 @@
+[Unit]
+Description=pysteps nowcast extrapolation from latest radar frames
+After=radar-ingest.service
+Wants=radar-ingest.service
+
+[Service]
+Type=oneshot
+User=radar
+Group=radar
+WorkingDirectory=/opt/radar
+EnvironmentFile=/etc/radar/env
+ExecStart=/opt/radar/backend/.venv/bin/radar nowcast
+Nice=10
+TimeoutStartSec=120
+ProtectSystem=strict
+ReadWritePaths=/var/lib/radar
+PrivateTmp=true
+NoNewPrivileges=true

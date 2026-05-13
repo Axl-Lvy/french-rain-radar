@@ -1,0 +1,36 @@
+name: deploy-backend
+
+# Auto-deploy the backend to the Hetzner VPS after CI passes on main.
+# The deploy step SSHs into the VPS and runs `backend/deploy/update.sh`,
+# which pulls the new code, re-syncs Python deps, and restarts the timers.
+
+on:
+  workflow_run:
+    workflows: ["backend"]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: SSH into VPS and run update.sh
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host:     ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_SSH_KEY }}
+          port:     ${{ secrets.DEPLOY_PORT || '22' }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            sudo /opt/radar/backend/deploy/update.sh

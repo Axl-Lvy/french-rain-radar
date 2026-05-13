@@ -1,0 +1,25 @@
+# Dev Caddyfile — HTTP only, no TLS, no rate-limit module dependency.
+# Used by `make dev-caddy` via docker compose. Username / password: dev / dev.
+
+{
+    auto_https off
+    admin off
+}
+
+:8080 {
+    encode gzip
+    root * /srv
+
+    @manifest path /manifest.json
+    header @manifest Cache-Control "no-cache, max-age=5"
+
+    @png path *.png
+    header @png Cache-Control "public, max-age=60"
+
+    basic_auth {
+        # `dev` / `dev`  — generated with `caddy hash-password --plaintext dev`
+        dev $2a$14$ojkB0gnt67yA9jaCFR0Vmu6jNJ4pkqRsR9bFNwzr5JaP5G7yZbZHe
+    }
+
+    file_server browse=off
+}

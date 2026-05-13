@@ -1,0 +1,10 @@
+[Unit]
+Description=Run AROME-NWC ingest hourly (HH:05 UTC, so the previous hour's run is published)
+
+[Timer]
+OnCalendar=*-*-* *:05:00
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

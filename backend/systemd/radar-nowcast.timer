@@ -1,0 +1,11 @@
+[Unit]
+Description=Run nowcast every 5 minutes (offset 1 min after radar-ingest)
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+AccuracySec=15s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

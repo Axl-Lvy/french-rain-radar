@@ -1,0 +1,16 @@
+[Unit]
+Description=Delete stale radar PNGs and trim the manifest
+
+[Service]
+Type=oneshot
+User=radar
+Group=radar
+WorkingDirectory=/opt/radar
+EnvironmentFile=/etc/radar/env
+ExecStart=/opt/radar/backend/.venv/bin/radar cleanup
+Nice=15
+TimeoutStartSec=60
+ProtectSystem=strict
+ReadWritePaths=/var/lib/radar
+PrivateTmp=true
+NoNewPrivileges=true

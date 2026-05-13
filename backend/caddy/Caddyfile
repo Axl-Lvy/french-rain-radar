@@ -1,0 +1,42 @@
+# Production Caddyfile — installs to /etc/caddy/Caddyfile.
+# Requires the caddy-ratelimit module (see backend/deploy/install.sh).
+
+{
+    # Replace with your real email or remove this line entirely.
+    email you@example.com
+}
+
+radar.yourdomain.tld {
+    encode gzip zstd
+    root * /var/lib/radar/tiles
+
+    @manifest path /manifest.json
+    header @manifest Cache-Control "no-cache, max-age=10"
+
+    @png path *.png
+    header @png Cache-Control "public, max-age=300, immutable"
+
+    basic_auth {
+        # Generate with:  caddy hash-password
+        # Example below is a dummy hash; replace before deploy.
+        alice $2a$14$REPLACE_WITH_REAL_BCRYPT_HASH...........................
+    }
+
+    rate_limit {
+        zone tiles {
+            key {http.auth.user.id}
+            events 1200
+            window 1m
+        }
+    }
+
+    file_server browse=off
+
+    log {
+        output file /var/log/caddy/radar.log {
+            roll_size 10MiB
+            roll_keep 5
+        }
+        format json
+    }
+}
