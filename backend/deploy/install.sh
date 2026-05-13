@@ -18,10 +18,16 @@ DEBIAN_FRONTEND=noninteractive apt install -y \
     curl ca-certificates gnupg
 
 echo "[2/8] uv..."
+# Install uv system-wide so the unprivileged `radar` user can find it.
 if ! command -v uv >/dev/null 2>&1; then
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
 fi
-export PATH="$HOME/.local/bin:$PATH"
+# Handle the case where a previous run installed uv into /root/.local/bin/:
+if [ -x /root/.local/bin/uv ] && [ ! -x /usr/local/bin/uv ]; then
+    install -m 0755 /root/.local/bin/uv  /usr/local/bin/uv
+    install -m 0755 /root/.local/bin/uvx /usr/local/bin/uvx
+fi
+command -v uv >/dev/null 2>&1 || { echo "uv install failed" >&2; exit 1; }
 
 echo "[3/8] user + paths..."
 id -u radar >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin radar
