@@ -6,7 +6,7 @@ A self-hosted precipitation-radar app covering all of metropolitan France (inclu
 
 - **Observed radar** every 5 min at 500 m resolution (Météo-France DPRadar mosaic, ODIM_H5).
 - **0–6 h forecast** at 15-min steps, ~1.1 km resolution (Météo-France AROME-PI, GRIB2).
-- **0–60 min nowcast** via pysteps optical-flow extrapolation on the radar history *(scaffolded; wiring is the last Phase 1 task)*.
+- **0–60 min nowcast** via pysteps optical-flow extrapolation on the radar history (optional `nowcast` extra; the timer logs + skips on installs without it).
 - **Lazy XYZ tile pyramid**: a small Python tile server renders 256×256 PNG tiles on demand the first time a client requests them, and Caddy serves them statically thereafter. Clients can zoom to any neighbourhood and the right tiles are produced at request time.
 - **Animated overlay** on a MapLibre map, delivered to Android, iOS, and Web (Wasm) clients from a single Kotlin Multiplatform / Compose Multiplatform codebase.
 

@@ -4,15 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-A self-hosted, RainViewer-style precipitation-radar app covering all of metropolitan France (incl. Corsica). Météo-France DPRadar mosaic (observed, 500 m, every 5 min) + pysteps optical-flow nowcast (0–60 min) *[scaffolded only]* + Météo-France AROME-PI (0–6 h forecast, ~1.1 km, hourly runs). Backend runs on a Hetzner VPS at `178.104.157.63`, private (HTTP basic auth + per-user rate limit), trusted-friends scale.
+A self-hosted, RainViewer-style precipitation-radar app covering all of metropolitan France (incl. Corsica). Météo-France DPRadar mosaic (observed, 500 m, every 5 min) + pysteps optical-flow nowcast (0–60 min) + Météo-France AROME-PI (0–6 h forecast, ~1.1 km, hourly runs). Backend runs on a Hetzner VPS at `178.104.157.63`, private (HTTP basic auth + per-user rate limit), trusted-friends scale.
 
-**Implementation status:**
-- ✅ Real ingest of both Météo-France APIs (`meteofrance.py` fully wired, `radar_hdf5.py` parses ODIM_H5, `grib.py` parses AROME-PI GRIB2).
+**Implementation status (Phase 1 complete):**
+- ✅ Real ingest of both Météo-France APIs (`meteofrance.py` fully wired, `radar_hdf5.py` reads + writes ODIM_H5, `grib.py` parses AROME-PI GRIB2).
 - ✅ Lazy XYZ tile rendering (`tile_server.py` FastAPI service, `tiles.py` math + render helpers).
 - ✅ Manifest v2 schema (tileUrlTemplate + minZoom/maxZoom + per-layer frame list; no per-frame URL).
 - ✅ Auto-deploy on push to `main` (GitHub Actions SSHs to VPS).
-- ⏳ `nowcast.py extrapolate` exists but the `radar nowcast` CLI subcommand is still a placeholder. Wiring it is the last Phase 1 task — see ADR-0004 + the roadmap exchange in conversation history.
-- ⏳ Kotlin client: scaffolded with placeholders; `RadarMap.{android,ios,wasmJs}.kt` need real MapLibre `RasterSource` wiring against `tileUrlTemplate`.
+- ✅ `radar nowcast` runs pysteps optical-flow extrapolation on the last 4 radar frames, writes 12 predicted ODIM_H5 frames to `sources/nowcast/`, replaces the cache + manifest on each run. Logs + exits 0 if `pysteps` isn't installed.
+- ⏳ **Phase 2 — Kotlin client**: scaffolded with placeholders; `RadarMap.{android,ios,wasmJs}.kt` need real MapLibre `RasterSource` wiring against `tileUrlTemplate`.
 
 ## Common commands
 
@@ -65,7 +65,7 @@ The backend has **two layers**:
 | Subcommand          | Timer cadence                     | Job |
 |---------------------|-----------------------------------|---|
 | `radar ingest-radar`| `*:0/5:30` (every 5 min, :30s)    | Download latest DPRadar mosaic HDF5 to `sources/radar/<ts>.h5`, update manifest |
-| `radar nowcast`     | `*:2/5:30` (every 5 min, offset)  | Placeholder — pysteps extrapolation TODO |
+| `radar nowcast`     | `*:2/5:30` (every 5 min, offset)  | Run pysteps LK on the last 4 radar frames, write 12 predicted ODIM_H5 frames to `sources/nowcast/`, update manifest |
 | `radar ingest-arome`| `*:10:00` (hourly at HH:10)       | Download all available AROME-PI leadtime GRIB2s to `sources/forecast/<ts>.grib2`, update manifest |
 | `radar cleanup`     | `03:30` daily                     | Drop sources older than retention + their cached tile trees |
 

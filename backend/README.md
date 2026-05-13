@@ -26,7 +26,7 @@ uv run ruff check .
 | Command | What it does | Cadence in prod |
 |---|---|---|
 | `radar ingest-radar` | Fetch the latest radar mosaic, render PNG, update manifest. | every 5 min |
-| `radar nowcast`      | Run pysteps on the latest radar frames, render nowcast PNGs. | every 5 min |
+| `radar nowcast`      | Run pysteps LK on the last 4 radar frames; write 12 predicted ODIM_H5 frames to `sources/nowcast/` (replaces previous run + cache). | every 5 min |
 | `radar ingest-arome` | Fetch AROME-NWC, render forecast PNGs. | hourly |
 | `radar cleanup`      | Delete PNGs older than the retention window. | daily |
 

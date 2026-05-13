@@ -19,7 +19,7 @@ A Python ingest pipeline runs on a Hetzner VPS, pulls radar + AROME-PI forecast 
    │                                            │
    │   radar ingest-radar  (every 5 min @ :30s) │
    │   radar ingest-arome  (hourly @ HH:10)     │
-   │   radar nowcast       (every 5 min)  TODO  │
+   │   radar nowcast       (every 5 min @ :02:30)│
    │   radar cleanup       (daily 03:30)        │
    │                                            │
    │  Only downloads sources; no rendering.     │
@@ -30,6 +30,7 @@ A Python ingest pipeline runs on a Hetzner VPS, pulls radar + AROME-PI forecast 
          ├── manifest.json                # v2; lists timestamps
          ├── sources/
          │   ├── radar/<ts>.h5            # ODIM_H5, ~2 MB each
+         │   ├── nowcast/<ts>.h5          # ODIM_H5 (extrapolated from radar)
          │   └── forecast/<ts>.grib2      # AROME-PI, ~3 MB each
          └── cache/
              ├── radar/<ts>/<z>/<x>/<y>.png

@@ -20,7 +20,7 @@ cd /opt/radar/backend/deploy
 5. Copies `env.example` → `/etc/radar/env` if it doesn't already exist (so a re-run won't clobber your secrets).
 6. Installs the systemd units (4 timers + 1 service) and enables them:
    - `radar-ingest.timer` (5-min radar mosaic download)
-   - `radar-nowcast.timer` (5-min, pysteps — currently placeholder)
+   - `radar-nowcast.timer` (5-min pysteps extrapolation; requires `uv sync --extra nowcast`, otherwise logs + skips)
    - `arome-ingest.timer` (hourly AROME-PI run download)
    - `radar-cleanup.timer` (daily retention)
    - **`radar-tileserver.service`** (long-lived FastAPI tile renderer on `127.0.0.1:8765`)

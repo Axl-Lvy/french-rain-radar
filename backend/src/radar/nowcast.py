@@ -40,7 +40,11 @@ def extrapolate(
     if len(frames) < 2:
         raise ValueError("pysteps needs at least 2 frames for motion estimation")
 
-    stack = np.stack(frames)
+    stack = np.stack(frames).astype(np.float32)
+    # pysteps LK can't read NaN; the radar mosaic encodes nodata/undetect as NaN.
+    # Zero-fill before motion estimation; out-of-domain pixels in the extrapolated
+    # output stay NaN.
+    stack = np.where(np.isnan(stack), np.float32(0.0), stack)
     oflow_method = motion.get_method("LK")
     velocity = oflow_method(stack)
 

@@ -31,6 +31,12 @@ from .manifest import (
 app = typer.Typer(help="French rain radar pipeline.", add_completion=False)
 log = structlog.get_logger(__name__)
 
+# Number of consecutive radar frames pysteps LK uses for motion estimation. 4
+# covers ~15 min of history at the 5-min radar cadence — long enough to
+# average out single-frame noise, short enough that the "steady motion"
+# assumption still holds.
+NOWCAST_HISTORY = 4
+
 
 def _configure_logging(level: str) -> None:
     logging.basicConfig(level=level.upper(), stream=sys.stderr, format="%(message)s")
@@ -209,9 +215,74 @@ def ingest_arome() -> None:
 def nowcast() -> None:
     """Run pysteps optical-flow extrapolation on the latest radar frames.
 
-    Requires the optional ``nowcast`` extra (pysteps). Not yet implemented.
+    Reads the last ``NOWCAST_HISTORY`` observed radar sources, extrapolates
+    them 0-60 min ahead at 5-min steps, and writes 12 predicted ODIM_H5
+    frames to ``sources/nowcast/`` for the tile server to render on demand.
+
+    Each invocation **replaces** all previous nowcast frames and their cached
+    tiles — old extrapolations are stale once a new radar frame arrives.
+
+    Requires the optional ``nowcast`` extra (pysteps). Without it, logs a
+    warning and exits 0 so the systemd timer stays green on installs that
+    deliberately skip the extra.
     """
-    typer.echo("TODO: implement pysteps extrapolation (Phase 1 follow-up)")
+    import shutil
+
+    from . import nowcast as nowcast_mod
+    from .radar_hdf5 import read_mosaic, write_mosaic
+
+    settings = get_settings()
+    manifest_path, manifest = _load_or_init_manifest(settings)
+
+    radar_dir = settings.tile_dir / "sources" / "radar"
+    if not radar_dir.exists():
+        log.warning("nowcast.skip.no-radar-sources")
+        return
+
+    radar_files = sorted(radar_dir.glob("*.h5"))[-NOWCAST_HISTORY:]
+    if len(radar_files) < 2:
+        log.warning("nowcast.skip.insufficient-frames", have=len(radar_files), need=2)
+        return
+
+    mosaics = [read_mosaic(p) for p in radar_files]
+    seed = mosaics[-1]
+
+    try:
+        predicted = list(nowcast_mod.extrapolate(
+            [m.values for m in mosaics],
+            base_time=seed.timestamp,
+            step_min=5,
+            lead_time_min=60,
+        ))
+    except ModuleNotFoundError as e:
+        log.warning("nowcast.skip.pysteps-missing", error=str(e))
+        return
+
+    nowcast_src_dir = settings.tile_dir / "sources" / "nowcast"
+    nowcast_cache_dir = settings.tile_dir / "cache" / "nowcast"
+    shutil.rmtree(nowcast_src_dir, ignore_errors=True)
+    shutil.rmtree(nowcast_cache_dir, ignore_errors=True)
+
+    valid_times: list[datetime] = []
+    for valid_time, field in predicted:
+        dest = _source_path(settings, "nowcast", valid_time, ".h5")
+        write_mosaic(dest, field, seed=seed, timestamp=valid_time)
+        valid_times.append(valid_time)
+
+    replace_layer_frames(
+        manifest, "nowcast",
+        timestamps=valid_times,
+        tile_url_template="nowcast/{timestamp}/{z}/{x}/{y}.png",
+        min_zoom=settings.min_zoom,
+        max_zoom=settings.max_zoom,
+    )
+    touch_generated_at(manifest)
+    write_manifest(manifest_path, manifest)
+    log.info(
+        "nowcast.frames.saved",
+        count=len(valid_times),
+        base=seed.timestamp.isoformat(),
+    )
 
 
 # ----- maintenance --------------------------------------------------------
