@@ -15,14 +15,29 @@
 rain.axl-lvy.fr {
     encode gzip zstd
 
+    # CORS: the Wasm client lives at https://axl-lvy.fr/rain and fetches
+    # manifest.json + tiles cross-origin with a Basic-auth header. Browsers
+    # send a preflight OPTIONS first (Authorization is a non-simple header);
+    # we short-circuit it BEFORE basic_auth / rate_limit run, since the
+    # preflight itself does not carry credentials.
+    @cors_preflight method OPTIONS
+    handle @cors_preflight {
+        header {
+            Access-Control-Allow-Origin "{http.request.header.Origin}"
+            Access-Control-Allow-Methods "GET, OPTIONS"
+            Access-Control-Allow-Headers "Authorization, Content-Type"
+            Access-Control-Allow-Credentials "true"
+            Access-Control-Max-Age "86400"
+            Vary "Origin"
+        }
+        respond 204
+    }
+
     # rate_limit runs before basic_auth (caddy-ratelimit hooks early). The
     # per_ip zone caps unauthenticated brute-force at 60 attempts / IP / min;
     # the per_user zone keeps the 1200 / user / min budget for legitimate
     # tile-heavy clients.
     rate_limit {
-        # per_ip catches brute-force from unauthenticated probes (no user.id yet)
-        # while leaving enough headroom for a legitimate tile-heavy scrub
-        # (a single timeline jump can fire 50+ tile requests from one client).
         zone per_ip {
             key {remote_host}
             events 600
@@ -45,6 +60,12 @@ rain.axl-lvy.fr {
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
         X-Content-Type-Options "nosniff"
         Referrer-Policy "no-referrer"
+        # Echo the request Origin back so axl-lvy.fr/rain (and any other
+        # cross-origin caller that has valid creds) can consume the API.
+        # Basic_auth still gates real access — CORS just unlocks the browser.
+        Access-Control-Allow-Origin "{http.request.header.Origin}"
+        Access-Control-Allow-Credentials "true"
+        Vary "Origin"
     }
 
     # Manifest: static, frequently updated.
