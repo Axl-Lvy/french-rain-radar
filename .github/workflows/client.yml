@@ -11,6 +11,8 @@ on:
     paths:
       - 'client/**'
       - 'schema/**'
+      - '.github/workflows/client.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read

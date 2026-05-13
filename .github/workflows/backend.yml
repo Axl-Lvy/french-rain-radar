@@ -11,6 +11,8 @@ on:
     paths:
       - 'backend/**'
       - 'schema/**'
+      - '.github/workflows/backend.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read

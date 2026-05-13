@@ -9,6 +9,8 @@ on:
     workflows: ["backend"]
     types: [completed]
     branches: [main]
+  # Manual redeploy from the Actions tab without making a code change.
+  workflow_dispatch:
 
 concurrency:
   group: deploy-backend
@@ -19,7 +21,9 @@ permissions:
 
 jobs:
   deploy:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # On workflow_run: only deploy when the upstream `backend` workflow succeeded.
+    # On workflow_dispatch: always deploy (manual operator action).
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     environment: production
     steps:

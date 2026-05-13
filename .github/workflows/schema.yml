@@ -2,10 +2,11 @@ name: schema
 
 on:
   pull_request:
-    paths: ['schema/**']
+    paths: ['schema/**', '.github/workflows/schema.yml']
   push:
     branches: [main]
-    paths: ['schema/**']
+    paths: ['schema/**', '.github/workflows/schema.yml']
+  workflow_dispatch:
 
 permissions:
   contents: read
