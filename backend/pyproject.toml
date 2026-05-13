@@ -29,8 +29,10 @@ dependencies = [
 [project.optional-dependencies]
 # pysteps compiles native code; gate behind an extra so the base install
 # works without system Python headers and so dev can iterate offline.
+# opencv-python-headless is required by pysteps' LK motion routine
+# (uses cv2.morphologyEx); headless variant skips GUI libs we'd never use.
 # Install with:  uv sync --extra nowcast
-nowcast = ["pysteps>=1.10"]
+nowcast = ["pysteps>=1.10", "opencv-python-headless>=4.10"]
 
 [project.scripts]
 radar = "radar.cli:app"
