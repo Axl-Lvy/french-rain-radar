@@ -8,6 +8,7 @@ tree under dev/data/).
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -60,6 +61,11 @@ class Settings(BaseSettings):
     # Tile-renderer HTTP service.
     tile_server_host: str = "127.0.0.1"
     tile_server_port: int = 8765
+
+    # Which pysteps method `radar nowcast` runs. "extrapolation" = LK +
+    # semi-Lagrangian advection (default, cheap); "sprog" = LK + AR(2)
+    # cascade (better 30-60 min skill, heavier FFT cost per step).
+    nowcast_method: Literal["extrapolation", "sprog"] = "extrapolation"
 
     bbox: Bbox = Field(default_factory=Bbox)
 

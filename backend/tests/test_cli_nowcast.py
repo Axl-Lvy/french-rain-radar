@@ -110,9 +110,11 @@ def test_happy_path_writes_12_frames_and_replaces_cache(
         base_time: datetime,
         step_min: int = 5,
         lead_time_min: int = 60,
+        method: str = "extrapolation",
     ) -> Iterator[tuple[datetime, np.ndarray]]:
         captured["n_frames"] = len(frames)
         captured["base_time"] = base_time
+        captured["method"] = method
         n_steps = lead_time_min // step_min
         for i in range(1, n_steps + 1):
             yield base_time + timedelta(minutes=step_min * i), np.full(
@@ -126,6 +128,7 @@ def test_happy_path_writes_12_frames_and_replaces_cache(
 
     assert captured["n_frames"] == 4
     assert captured["base_time"] == base_time
+    assert captured["method"] == "extrapolation"
 
     sources = sorted((tile_dir / "sources" / "nowcast").glob("*.h5"))
     assert len(sources) == 12
@@ -163,6 +166,7 @@ def test_uses_only_last_history_frames(
         base_time: datetime,
         step_min: int = 5,
         lead_time_min: int = 60,
+        method: str = "extrapolation",
     ) -> Iterator[tuple[datetime, np.ndarray]]:
         captured["n_frames"] = len(frames)
         # Distinguish from the older frames by their constant value.
@@ -176,3 +180,40 @@ def test_uses_only_last_history_frames(
     assert captured["n_frames"] == 4
     # The newest seed value is i=9 -> (9+1)*0.5 = 5.0.
     assert captured["last_value"] == pytest.approx(5.0, abs=0.01)
+
+
+def test_method_flag_flows_through(
+    tile_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """RADAR_NOWCAST_METHOD=sprog reaches extrapolate()."""
+    monkeypatch.setenv("RADAR_NOWCAST_METHOD", "sprog")
+    _seed_radar_files(tile_dir, n=4)
+
+    captured: dict[str, object] = {}
+
+    def _fake_extrapolate(
+        frames: list[np.ndarray],
+        *,
+        base_time: datetime,
+        step_min: int = 5,
+        lead_time_min: int = 60,
+        method: str = "extrapolation",
+    ) -> Iterator[tuple[datetime, np.ndarray]]:
+        captured["method"] = method
+        yield base_time + timedelta(minutes=5), np.zeros(frames[-1].shape, dtype=np.float32)
+
+    monkeypatch.setattr("radar.nowcast.extrapolate", _fake_extrapolate)
+
+    result = runner.invoke(app, ["nowcast"])
+    assert result.exit_code == 0, result.output
+    assert captured["method"] == "sprog"
+
+
+def test_invalid_method_env_rejected(
+    tile_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unknown method value fails fast via Settings validation."""
+    monkeypatch.setenv("RADAR_NOWCAST_METHOD", "magic")
+    _seed_radar_files(tile_dir, n=4)
+    result = runner.invoke(app, ["nowcast"])
+    assert result.exit_code != 0

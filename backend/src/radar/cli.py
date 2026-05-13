@@ -43,6 +43,7 @@ NOWCAST_HISTORY = 4
 NOWCAST_DOWNSAMPLE = 2
 
 
+
 def _configure_logging(level: str) -> None:
     logging.basicConfig(level=level.upper(), stream=sys.stderr, format="%(message)s")
     structlog.configure(
@@ -254,12 +255,14 @@ def nowcast() -> None:
         mosaics = [downsample_mosaic(m, NOWCAST_DOWNSAMPLE) for m in mosaics]
     seed = mosaics[-1]
 
+    log.info("nowcast.start", method=settings.nowcast_method, history=len(mosaics))
     try:
         predicted = list(nowcast_mod.extrapolate(
             [m.values for m in mosaics],
             base_time=seed.timestamp,
             step_min=5,
             lead_time_min=60,
+            method=settings.nowcast_method,
         ))
     except ModuleNotFoundError as e:
         log.warning("nowcast.skip.pysteps-missing", error=str(e))
