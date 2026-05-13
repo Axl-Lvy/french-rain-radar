@@ -63,14 +63,24 @@ if ! command -v caddy >/dev/null 2>&1; then
     apt install -y caddy
 fi
 
-echo "  NOTE: the rate_limit directive requires a custom Caddy build."
-echo "        Easiest path:  apt install caddy && go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest"
-echo "        Then:          xcaddy build --with github.com/mholt/caddy-ratelimit \\"
-echo "                       --output /usr/bin/caddy"
-echo "        Or use the docker image  caddy:builder-alpine  to produce the binary."
+# Add the rate_limit module in place. Works on Caddy >= 2.7 installed from
+# the official deb package. Replaces /usr/bin/caddy with a build that includes
+# the extra plugin. Will try to reload Caddy and fail because the Caddyfile
+# still has placeholders -- that's expected; we install the file next.
+caddy add-package github.com/mholt/caddy-ratelimit || true
 
 install -m 644 "$REPO_ROOT/backend/caddy/Caddyfile" /etc/caddy/Caddyfile
-systemctl reload caddy || systemctl restart caddy
 
 echo "[8/8] done."
-echo "       Edit /etc/radar/env, then:    systemctl start radar-ingest.service"
+cat <<'POST'
+
+Next steps (manual, one-time):
+  1. Edit /etc/radar/env and fill in METEOFRANCE_TOKEN.
+  2. Edit /etc/caddy/Caddyfile and replace the three placeholders:
+        - hostname  (radar.yourdomain.tld)
+        - email     (you@example.com, or delete the {email ...} block)
+        - bcrypt hash for each user  (generate with: caddy hash-password)
+  3. caddy validate --config /etc/caddy/Caddyfile
+  4. systemctl restart caddy && systemctl status caddy --no-pager
+  5. sudo -u radar /opt/radar/backend/.venv/bin/radar init-manifest
+POST
