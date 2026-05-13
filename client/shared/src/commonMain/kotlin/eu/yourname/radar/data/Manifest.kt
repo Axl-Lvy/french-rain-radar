@@ -40,7 +40,11 @@ data class Layers(
 )
 
 @Serializable
-data class Layer(val frames: List<Frame>)
+data class Layer(
+    val frames: List<Frame>,
+    /** Reference time of the NWP run that produced this layer's frames (forecast only). */
+    val runTime: Instant? = null,
+)
 
 @Serializable
 data class Frame(

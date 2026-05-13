@@ -60,6 +60,11 @@
         "frames": {
           "type": "array",
           "items": { "$ref": "#/$defs/frame" }
+        },
+        "runTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Reference time of the NWP run that produced this layer's frames (forecast layer only)."
         }
       }
     },

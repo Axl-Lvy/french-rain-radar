@@ -1,32 +1,95 @@
 # Data sources
 
-All data comes from **Météo-France**, distributed under the [Licence Ouverte / Etalab](https://www.etalab.gouv.fr/licence-ouverte-open-licence/). You need a free API token from <https://portail-api.meteofrance.fr/>.
+Both APIs are free under [Licence Ouverte / Etalab](https://www.etalab.gouv.fr/licence-ouverte-open-licence/) via <https://portail-api.meteofrance.fr/>. One API key per subscription, passed in the `apikey` request header (keys are JWTs, ~1.6 KB each).
 
-## Products used
+The pipeline composes three layers from these:
 
-| Product | Purpose | Resolution | Cadence | Forecast range |
-|---|---|---|---|---|
-| PRECIP-FRANCE (radar mosaic) | Observed precipitation | ~1 km | 5 min | observed |
-| AROME-NWC | Numerical weather forecast for the very near term | 1.3 km | hourly runs, ~15-min timesteps | 0–6 h |
+- **radar** — observed precipitation, refreshed every 5 min
+- **nowcast** — local pysteps extrapolation of the radar history, 0–60 min
+- **forecast** — AROME-PI NWP, 0–6 h horizon, hourly runs
 
-The pipeline composes:
+## API 1 — AROME-PI (forecast layer)
 
-- **radar layer** → past observed frames from the radar mosaic (used for "now" and the recent history scrubber)
-- **nowcast layer** → 0–60 min generated locally via `pysteps` optical-flow extrapolation on the latest 4–6 radar frames
-- **forecast layer** → 1–6 h from AROME-NWC
+Portal page: <https://portail-api.meteofrance.fr/web/en/api/PaquetAROME>
 
-The transition between nowcast and AROME-NWC is blended around 45–75 min using linear weights, so the timeline appears continuous to the user.
+| Property | Value |
+|---|---|
+| Base URL | `https://public-api.meteofrance.fr/public/aromepi/1.0/wcs/MF-NWP-HIGHRES-AROMEPI-001-FRANCE-WCS` |
+| Protocol | WCS 2.0.1 |
+| Auth | `apikey: <jwt>` header |
+| Rate limit | 100 req/min |
+| Coverage of interest | `TOTAL_WATER_PRECIPITATION__GROUND_OR_WATER_SURFACE___<RUN>_PT15M` |
+| `<RUN>` format | `YYYY-MM-DDTHH.MM.SSZ` (e.g. `2026-05-13T20.00.00Z`) |
+| Run cadence | hourly |
+| Time axis | 24 steps in seconds offsets: 900, 1800, 2700, …, 21600 (+15 min through +6 h, in 15-min steps) |
+| Spatial CRS | EPSG:4326 (regular lat/lon, 0.01° ≈ 1.1 km) |
+| Spatial extent | lon −12 to +16, lat 37.5 to 55.4 (Western Europe) |
+| GRIB short-name | `tirf` ("Time integral of rain flux") |
+| Unit | `kg m⁻²` = mm of water over the 15-min accumulation window. Multiply by 4 for mm/h. |
+| Native format | `application/wmo-grib` (also offers `image/tiff`) |
 
-## Projection note
+### Endpoints
 
-Météo-France grids are in **Lambert-93 (EPSG:2154)**. The pipeline reprojects to **Web Mercator (EPSG:3857)** so the resulting PNGs drop onto a MapLibre map without further transformation.
+```
+GET /GetCapabilities?service=WCS&version=2.0.1&language=eng
+GET /DescribeCoverage?service=WCS&version=2.0.1&coverageid=<COVERAGE_ID>
+GET /GetCoverage?service=WCS&version=2.0.1
+                 &coverageid=<COVERAGE_ID>
+                 &format=application%2Fwmo-grib
+                 &subset=long(<lon_min>,<lon_max>)
+                 &subset=lat(<lat_min>,<lat_max>)
+                 &subset=time(<seconds_offset>)
+```
 
-## Useful reference URLs
+### Quirks
 
-- Modern API portal: <https://portail-api.meteofrance.fr/>
-- Open-data portal (datasets, docs): <https://meteo.data.gouv.fr/>
-- Legacy portal (kept here for archaeology): <https://donneespubliques.meteofrance.fr/?fond=produit&id_produit=307&id_rubrique=34>
+- **Time subset must slice, not trim**: `time(900,900)` is rejected with `InvalidSubsetting`. Use the single-value form: `time(900)`.
+- **`format` must be URL-encoded**: `application%2Fwmo-grib`.
+- GetCapabilities is ~36 K lines — parse with `xml.etree.ElementTree.iterparse`, don't hold it all in memory.
 
-## Terms of use
+## API 2 — Radar data (radar layer)
 
-The Licence Ouverte permits free reuse, redistribution, and adaptation, including commercial use, as long as Météo-France is credited. The client UI must surface "Source: Météo-France" somewhere visible.
+Portal page: <https://portail-api.meteofrance.fr/web/en/api/DonneesPubliquesRadar>
+
+| Property | Value |
+|---|---|
+| Base URL | `https://public-api.meteofrance.fr/public/DPRadar/v1` |
+| Protocol | Bespoke REST (HATEOAS-style; not WCS) |
+| Auth | `apikey: <jwt>` header |
+| Rate limit | 850 req / 5 min |
+| Zone | `METROPOLE` |
+| Observation | `LAME_D_EAU` (5-min precipitation accumulation) |
+| Frame cadence | every 5 min |
+| Available `maille` | `500` (HDF5, ODIM_H5/V2.3) or `1000` (gzipped BUFR) |
+| **We use `maille=500`** | ~2 MB per frame, ODIM_H5 trivially parses with h5py |
+| Native projection | Polar Stereographic, `+proj=stere +lat_0=90 +lon_0=0 +lat_ts=45 +ellps=WGS84 +x_0=619652.07 +y_0=5262818.34 +datum=WGS84` |
+| Grid | 3472 × 3472 cells at 500 m spacing |
+| Coverage | Western Europe: UL 53.67/-9.97, UR 52.55/17.56, LL 38.14/-6.72, LR 37.46/11.98 |
+
+### Endpoints
+
+```
+GET /mosaiques
+GET /mosaiques/METROPOLE
+GET /mosaiques/METROPOLE/observations
+GET /mosaiques/METROPOLE/observations/LAME_D_EAU        # ← cheap, returns validity_time
+GET /mosaiques/METROPOLE/observations/LAME_D_EAU/produit?maille=500
+```
+
+The fourth call returns a small JSON descriptor whose `links[<latest>].validity_time` is the timestamp of the freshest frame available. Use it for the dedup check before pulling the heavy `produit`.
+
+### HDF5 structure
+
+```
+/                             attrs: Conventions=ODIM_H5/V2_3
+/where                        attrs: projdef, UL/UR/LL/LR_lat+lon, xsize, ysize, xscale, yscale
+/dataset1/what                attrs: startdate, starttime, enddate, endtime  (= 5-min window)
+/dataset1/data1/data          shape=(3472, 3472), dtype=uint16
+/dataset1/data1/what          attrs: gain=0.01, offset=0.0, nodata=65535, undetect=65534, quantity=ACRR
+```
+
+Conversion: `mm = raw * gain + offset`, with `raw ∈ {nodata, undetect}` → NaN. `mm/h = mm × 12`.
+
+## Citation
+
+The Licence Ouverte requires crediting Météo-France visibly. The client UI surfaces "Source: Météo-France" on the map view; the manifest carries an `attribution` field for future flexibility.
