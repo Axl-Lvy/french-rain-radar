@@ -24,6 +24,9 @@ def write_png(rgba: np.ndarray, dest: Path) -> None:
     tmp = Path(tmp_str)
     try:
         Image.fromarray(rgba, mode="RGBA").save(tmp, format="PNG", optimize=False)
+        # mkstemp defaults to 0600; Caddy (user `caddy`) reads files written by
+        # the `radar` user, so make them world-readable before the atomic rename.
+        os.chmod(tmp, 0o644)
         os.replace(tmp, dest)
     except Exception:
         tmp.unlink(missing_ok=True)

@@ -2,8 +2,8 @@
 # Requires the caddy-ratelimit module (see backend/deploy/install.sh).
 
 {
-    # Replace with your real email or remove this line entirely.
-    email you@example.com
+    # Used by Let's Encrypt for expiry warnings. Remove if you'd rather stay anonymous.
+    email axel.levy98@gmail.com
 }
 
 radar.yourdomain.tld {
@@ -30,13 +30,10 @@ radar.yourdomain.tld {
         }
     }
 
-    file_server browse=off
+    file_server
 
-    log {
-        output file /var/log/caddy/radar.log {
-            roll_size 10MiB
-            roll_keep 5
-        }
-        format json
-    }
+    # Log to journald by default (visible via `journalctl -u caddy`).
+    # For a separate file destination, swap in a `log { output file ... }` block
+    # and ensure /var/log/caddy is writable by the caddy user.
+    log
 }

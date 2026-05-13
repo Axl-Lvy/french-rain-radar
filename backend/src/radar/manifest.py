@@ -45,13 +45,19 @@ def empty_manifest(*, bbox: dict[str, float], tile_size: dict[str, int], color_s
 
 
 def write_manifest(path: Path, manifest: dict[str, Any]) -> None:
-    """Validate and write ``manifest`` to ``path`` atomically."""
+    """Validate and write ``manifest`` to ``path`` atomically.
+
+    The resulting file is mode 0644 so Caddy (running as the ``caddy`` user)
+    can read what the ``radar`` user writes. ``tempfile.mkstemp`` defaults
+    to 0600, so we explicitly chmod before the atomic rename.
+    """
     validate_manifest(manifest)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_str = tempfile.mkstemp(prefix="manifest.json.", suffix=".tmp", dir=str(path.parent))
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fp:
             json.dump(manifest, fp, indent=2)
+        os.chmod(tmp_str, 0o644)
         os.replace(tmp_str, path)
     except Exception:
         Path(tmp_str).unlink(missing_ok=True)
