@@ -10,7 +10,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 sudo -u radar bash -lc "cd $REPO_ROOT && git pull --ff-only"
-sudo -u radar bash -lc "cd $REPO_ROOT/backend && uv sync"
+sudo -u radar bash -lc "cd $REPO_ROOT/backend && uv sync --extra nowcast"
 
 # Re-install systemd units in case they changed.
 install -m 644 "$REPO_ROOT/backend/systemd/"*.service /etc/systemd/system/

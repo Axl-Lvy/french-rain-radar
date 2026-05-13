@@ -14,7 +14,8 @@ fi
 echo "[1/8] apt deps..."
 apt update
 DEBIAN_FRONTEND=noninteractive apt install -y \
-    python3.12 python3.12-venv libeccodes-dev \
+    python3.12 python3.12-venv python3.12-dev libeccodes-dev \
+    build-essential \
     curl ca-certificates gnupg
 
 echo "[2/8] uv..."
@@ -36,7 +37,7 @@ install -d /etc/radar
 
 echo "[4/8] backend deps..."
 chown -R radar:radar "$REPO_ROOT"
-sudo -u radar bash -lc "cd $REPO_ROOT/backend && uv sync"
+sudo -u radar bash -lc "cd $REPO_ROOT/backend && uv sync --extra nowcast"
 
 echo "[5/8] env file..."
 if [ ! -f /etc/radar/env ]; then
