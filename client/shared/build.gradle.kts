@@ -22,7 +22,16 @@ kotlin {
 
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
     wasmJs {
-        browser()
+        browser {
+            // Karma defaults to ChromeHeadless; Firefox is what's available on
+            // this dev box and CI runners. Override here so `:shared:wasmJsTest`
+            // doesn't need a Chrome binary.
+            testTask {
+                useKarma {
+                    useFirefoxHeadless()
+                }
+            }
+        }
         binaries.executable()
     }
 
@@ -60,6 +69,7 @@ kotlin {
             implementation(libs.ktor.okhttp)
             implementation(libs.maplibre.android)
             implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.lifecycle.runtime.compose)
         }
 
         iosMain.dependencies {

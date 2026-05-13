@@ -42,6 +42,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
-    // Manifest and resources stay in src/main/ (AGP convention).
-    // Kotlin sources live in src/androidMain/kotlin/ (KMP source-set layout v2).
+    // KMP source-set layout v2: everything lives under src/androidMain/
+    // (kotlin/, AndroidManifest.xml, res/). The kotlin.mpp.androidSourceSetLayoutVersion=2
+    // property in gradle.properties opts in.
 }

@@ -6,13 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A self-hosted, RainViewer-style precipitation-radar app covering all of metropolitan France (incl. Corsica). Météo-France DPRadar mosaic (observed, 500 m, every 5 min) + pysteps optical-flow nowcast (0–60 min) + Météo-France AROME-PI (0–6 h forecast, ~1.1 km, hourly runs). Backend runs on a Hetzner VPS at `178.104.157.63`, private (HTTP basic auth + per-user rate limit), trusted-friends scale.
 
-**Implementation status (Phase 1 complete):**
+**Implementation status (Phases 1 + 2 complete; iOS deferred):**
 - ✅ Real ingest of both Météo-France APIs (`meteofrance.py` fully wired, `radar_hdf5.py` reads + writes ODIM_H5, `grib.py` parses AROME-PI GRIB2).
 - ✅ Lazy XYZ tile rendering (`tile_server.py` FastAPI service, `tiles.py` math + render helpers).
 - ✅ Manifest v2 schema (tileUrlTemplate + minZoom/maxZoom + per-layer frame list; no per-frame URL).
 - ✅ Auto-deploy on push to `main` (GitHub Actions SSHs to VPS).
 - ✅ `radar nowcast` runs pysteps optical-flow extrapolation on the last 4 radar frames, writes 12 predicted ODIM_H5 frames to `sources/nowcast/`, replaces the cache + manifest on each run. Logs + exits 0 if `pysteps` isn't installed.
-- ⏳ **Phase 2 — Kotlin client**: scaffolded with placeholders; `RadarMap.{android,ios,wasmJs}.kt` need real MapLibre `RasterSource` wiring against `tileUrlTemplate`.
+- ✅ **Phase 2 — Kotlin client**: Android (`MapView` + `RasterSource` with OkHttp basic-auth interceptor) and Wasm (`maplibre-gl-js` with `transformRequest`) both wire the manifest's `tileUrlTemplate`. First-launch flow prompts for password (URL baked in `Config.BASE_URL`), persists to platform settings, polls `manifest.json` every 60 s, builds a unified chronological timeline (radar → nowcast → forecast) and drives a `TimelineScrubber`. Wasm layout splits the viewport: map on top, fixed 320 px Compose canvas at bottom for the auth sheet + timeline card.
+- ⏳ **iOS** stays placeholder — needs macOS + Xcode to link the framework; revisit when Mac access is available.
 
 ## Common commands
 
@@ -122,14 +123,28 @@ Everything except the map view lives in `client/shared/src/commonMain/`. The map
 
 ```kotlin
 @Composable
-expect fun RadarMap(bbox: Bbox, overlayUrl: String?, modifier: Modifier = Modifier)
+expect fun RadarMap(
+    bbox: Bbox,
+    currentFrame: TimelineFrame?,
+    tileAuthHeader: String,
+    modifier: Modifier = Modifier,
+)
 ```
 
-Three actuals: Android (`AndroidView { MapView }` from `org.maplibre.gl:android-sdk`), iOS (`UIKitView { MGLMapView }` via cinterop), Wasm (HTMLElement hosting maplibre-gl-js). **All three currently render a placeholder Box** — the Phase 2 task is to replace them with real `RasterSource` consuming the manifest's `tileUrlTemplate`. For each frame on the timeline, the client builds a URL by substituting the frame's `timestamp` into the template and letting MapLibre fill in `{z}/{x}/{y}`.
+[TimelineFrame] carries `tileUrlTemplate` with `{timestamp}` already substituted (URL-safe `YYYY-MM-DDTHH-MM-SSZ` form matching the backend's source/cache directory layout). MapLibre fills the remaining `{z}/{x}/{y}` per tile fetch.
 
-KMP **source-set layout v2** is in effect: Kotlin sources under `src/<target>Main/kotlin/`, not `src/main/kotlin/`. AGP still owns `src/main/AndroidManifest.xml` and `src/main/res/`. `expect/actual` classes are in Kotlin Beta — `kotlin.mpp.expectActualClasses=true` in `gradle.properties` acknowledges that and silences the warning.
+Two actuals are wired; iOS is placeholder:
+- **Android** — `AndroidView { MapView }` from `org.maplibre.gl:android-sdk` (11.x). `MapLibre.getInstance(context)` initialises the singleton from the `AndroidView.factory`; `HttpRequestUtil.setOkHttpClient(client)` installs an interceptor that attaches `Authorization: Basic …` only to requests whose path starts with `/radar/`, `/nowcast/`, or `/forecast/` — the demotiles base map fetches stay unauthenticated. Lifecycle (`onStart/onStop/onPause/onResume/onDestroy`) is forwarded via `LifecycleEventObserver` on `LocalLifecycleOwner`.
+- **Wasm** — `maplibre-gl-js` mounted on a `<div id="map">` declared in `wasmJsApp/src/wasmJsMain/resources/index.html`. The Compose canvas is sized to a 320 px strip at the bottom of the viewport; the map fills the rest. The map is NOT inside the Compose tree — `RadarMap.wasmJs.kt` is a side-effect-only composable that runs `DisposableEffect` to create/destroy the JS map and `LaunchedEffect` to swap the radar `RasterSource`'s tile list when `currentFrame` changes. JS interop uses `@JsFun` strings (no separate `.d.ts` shim). The same conditional-auth `transformRequest` is applied at map construction.
+- **iOS** — placeholder. The `UIKitView { MGLMapView }` wiring needs macOS + Xcode to actually link.
 
-The Gradle wrapper jar is **not committed**; `setup.sh` downloads it from the official Gradle distribution.
+**First-launch flow** (commonMain `RadarScreen`): if `SettingsStore` has no `auth.password`, show `AuthSheet` (username + password fields). On submit, persist to settings, build an Ktor `HttpClient` with Basic auth, kick off `RadarRepository.pollManifest(60s)`. Each new manifest is flattened by `Manifest.toTimeline(baseUrl)` into a single chronological list of `TimelineFrame`s spanning radar → nowcast → forecast. The slider drives `currentIndex`; tapping `⎋` clears creds and re-shows the auth sheet.
+
+`Config.BASE_URL` is the only build-time configuration (defaults to `https://rain.axl-lvy.fr/`). Edit + rebuild to point at a different backend.
+
+KMP **source-set layout v2** is in effect: Kotlin sources, `AndroidManifest.xml`, and `res/` all live under `src/androidMain/` (not `src/main/`). `expect/actual` classes are in Kotlin Beta — `kotlin.mpp.expectActualClasses=true` in `gradle.properties` acknowledges that and silences the warning.
+
+The Gradle wrapper jar is **not committed**; `setup.sh` downloads it from the official Gradle distribution. The Android SDK location is in `client/local.properties` (also not committed).
 
 Package namespace is `eu.yourname.radar.*` — placeholder, rename when claiming a real domain.
 

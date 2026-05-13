@@ -7,17 +7,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import eu.yourname.radar.data.Bbox
+import eu.yourname.radar.domain.TimelineFrame
 
-/**
- * TODO: replace placeholder with a `UIKitView` hosting `MGLMapView` from MapLibre iOS.
- *
- * The cinterop bindings for MapLibre iOS live under
- * `shared/src/nativeInterop/cinterop/MapLibre.def`. As an alternative, wrap
- * MapLibre in a thin Swift Package and call it via objc-names.
- */
+/** Placeholder; iOS wiring is out of scope for Phase 2 (no Mac/Xcode here). */
 @Composable
-actual fun RadarMap(bbox: Bbox, overlayUrl: String?, modifier: Modifier) {
+actual fun RadarMap(
+    bbox: Bbox,
+    frames: List<TimelineFrame>,
+    currentIndex: Int,
+    tileAuthHeader: String,
+    cameraTarget: Pair<Double, Double>?,
+    userLocationEnabled: Boolean,
+    modifier: Modifier,
+) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("RadarMap[iOS] — overlay=$overlayUrl")
+        Text("RadarMap[iOS] — ${frames.getOrNull(currentIndex)?.timestamp ?: "no frame"}")
     }
 }

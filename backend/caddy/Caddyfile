@@ -59,7 +59,10 @@ rain.axl-lvy.fr {
     @tile path_regexp tilepath ^/(radar|nowcast|forecast)/[^/]+/\d+/\d+/\d+\.png$
     handle @tile {
         root * /var/lib/radar/tiles/cache
-        header Cache-Control "public, max-age=300, immutable"
+        # Tile URLs are timestamp-scoped — same URL always returns the same
+        # PNG. Cache aggressively so the client doesn't re-fetch as the user
+        # scrubs back to a frame they've already seen.
+        header Cache-Control "public, max-age=31536000, immutable"
 
         @cached file
         handle @cached {

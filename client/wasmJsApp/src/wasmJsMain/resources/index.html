@@ -5,18 +5,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>French Rain Radar</title>
 
-    <!-- maplibre-gl-js: loaded here so the Wasm RadarMap actual can mount a map into #map.
-         Replace the version once you scaffold; check https://maplibre.org/maplibre-gl-js/docs/ -->
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.0/dist/maplibre-gl.css" />
     <script src="https://unpkg.com/maplibre-gl@4.7.0/dist/maplibre-gl.js"></script>
 
     <style>
-        html, body { margin: 0; padding: 0; height: 100%; width: 100%; background: #1a1a1a; color: #eee;
-                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        canvas#ComposeTarget { display: block; width: 100%; height: 100%; }
+        html, body {
+            margin: 0; padding: 0; height: 100%; width: 100%;
+            background: #1a1a1a; color: #eee; overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        /* MapLibre takes the top portion of the viewport; the Compose canvas
+           occupies a fixed-height bar at the bottom for the auth sheet and
+           timeline scrubber. Side-by-side avoids the pointer-events conflict
+           that a transparent overlay canvas would create. */
+        #map {
+            position: fixed; top: 0; left: 0; right: 0;
+            height: calc(100vh - 320px);
+            z-index: 0;
+            background: #14171c;
+        }
+        canvas#ComposeTarget {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            height: 320px; width: 100%;
+            display: block;
+            z-index: 1;
+        }
+        /* Push MapLibre's top-right control stack (zoom +/-, compass,
+           geolocate) below the page edge so it sits comfortably away from
+           the viewport corner. */
+        .maplibregl-ctrl-top-right { top: 16px; right: 16px; }
     </style>
 </head>
 <body>
+<div id="map"></div>
 <canvas id="ComposeTarget"></canvas>
 <script src="wasmJsApp.js"></script>
 </body>
