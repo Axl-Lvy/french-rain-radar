@@ -92,6 +92,47 @@ def read_mosaic(path: Path) -> RadarMosaic:
         )
 
 
+def downsample_mosaic(mosaic: RadarMosaic, factor: int) -> RadarMosaic:
+    """Return a copy of ``mosaic`` reduced by ``factor`` along both axes.
+
+    NaN-aware mean pooling: each output cell is the mean of finite cells in
+    its ``factor x factor`` source block (NaN if the whole block is NaN).
+    Used by ``radar nowcast`` to fit full-France LK into the VPS RAM budget;
+    3472x3472 @ 500 m -> 1736x1736 @ 1 km loses negligible nowcast skill at
+    the 0-60 min horizon but cuts pysteps' peak memory roughly 4x.
+    """
+    if factor < 1:
+        raise ValueError(f"factor must be >= 1, got {factor}")
+    if factor == 1:
+        return mosaic
+
+    arr = mosaic.values
+    h, w = arr.shape
+    h_t = h - (h % factor)
+    w_t = w - (w % factor)
+    arr = arr[:h_t, :w_t]
+    import warnings
+
+    reshaped = arr.reshape(h_t // factor, factor, w_t // factor, factor)
+    # nanmean of an all-NaN block returns NaN with a RuntimeWarning — NaN is
+    # what we want, the warning is noise.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Mean of empty slice")
+        pooled = np.nanmean(reshaped, axis=(1, 3)).astype(np.float32)
+
+    return RadarMosaic(
+        values=pooled,
+        timestamp=mosaic.timestamp,
+        proj_def=mosaic.proj_def,
+        x_scale=mosaic.x_scale * factor,
+        y_scale=mosaic.y_scale * factor,
+        ul_lon=mosaic.ul_lon, ul_lat=mosaic.ul_lat,
+        ur_lon=mosaic.ur_lon, ur_lat=mosaic.ur_lat,
+        ll_lon=mosaic.ll_lon, ll_lat=mosaic.ll_lat,
+        lr_lon=mosaic.lr_lon, lr_lat=mosaic.lr_lat,
+    )
+
+
 def mm_per_window_to_mm_per_hour(window_minutes: int = 5) -> float:
     """Multiplier to convert mm accumulated over a window to mm/h.
 

@@ -37,6 +37,11 @@ log = structlog.get_logger(__name__)
 # assumption still holds.
 NOWCAST_HISTORY = 4
 
+# Halve radar resolution (500 m -> 1 km) before pysteps LK. Full 3472x3472
+# float32 stacks plus opencv pyramids OOM-kill the service on the cheap VPS.
+# Nowcast skill at the 0-60 min horizon barely budges at 1 km vs 500 m.
+NOWCAST_DOWNSAMPLE = 2
+
 
 def _configure_logging(level: str) -> None:
     logging.basicConfig(level=level.upper(), stream=sys.stderr, format="%(message)s")
@@ -229,7 +234,7 @@ def nowcast() -> None:
     import shutil
 
     from . import nowcast as nowcast_mod
-    from .radar_hdf5 import read_mosaic, write_mosaic
+    from .radar_hdf5 import downsample_mosaic, read_mosaic, write_mosaic
 
     settings = get_settings()
     manifest_path, manifest = _load_or_init_manifest(settings)
@@ -245,6 +250,8 @@ def nowcast() -> None:
         return
 
     mosaics = [read_mosaic(p) for p in radar_files]
+    if NOWCAST_DOWNSAMPLE > 1:
+        mosaics = [downsample_mosaic(m, NOWCAST_DOWNSAMPLE) for m in mosaics]
     seed = mosaics[-1]
 
     try:

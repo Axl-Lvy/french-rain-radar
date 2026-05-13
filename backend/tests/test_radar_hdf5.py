@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from radar.radar_hdf5 import RadarMosaic, read_mosaic, write_mosaic
+from radar.radar_hdf5 import RadarMosaic, downsample_mosaic, read_mosaic, write_mosaic
 
 _SEED = RadarMosaic(
     values=np.zeros((6, 8), dtype=np.float32),
@@ -67,3 +67,53 @@ def test_write_chmods_to_0644(tmp_path: Path) -> None:
     dest = tmp_path / "frame.h5"
     write_mosaic(dest, np.zeros((6, 8), dtype=np.float32), seed=_SEED, timestamp=_SEED.timestamp)
     assert (dest.stat().st_mode & 0o777) == 0o644
+
+
+def test_downsample_mosaic_halves_resolution_and_scales() -> None:
+    values = np.arange(48, dtype=np.float32).reshape(6, 8)
+    seed = RadarMosaic(
+        values=values,
+        timestamp=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),
+        proj_def=_SEED.proj_def,
+        x_scale=500.0, y_scale=500.0,
+        ul_lon=_SEED.ul_lon, ul_lat=_SEED.ul_lat,
+        ur_lon=_SEED.ur_lon, ur_lat=_SEED.ur_lat,
+        ll_lon=_SEED.ll_lon, ll_lat=_SEED.ll_lat,
+        lr_lon=_SEED.lr_lon, lr_lat=_SEED.lr_lat,
+    )
+    out = downsample_mosaic(seed, factor=2)
+
+    assert out.values.shape == (3, 4)
+    assert out.x_scale == 1000.0
+    assert out.y_scale == 1000.0
+    # Spatial extent (corner lon/lats) is unchanged — same coverage, lower res.
+    assert out.ul_lon == seed.ul_lon
+    assert out.lr_lat == seed.lr_lat
+    # Each output cell = mean of its 2x2 source block.
+    np.testing.assert_allclose(out.values[0, 0], values[:2, :2].mean(), rtol=1e-5)
+    np.testing.assert_allclose(out.values[2, 3], values[4:6, 6:8].mean(), rtol=1e-5)
+
+
+def test_downsample_mosaic_is_nan_aware() -> None:
+    values = np.ones((4, 4), dtype=np.float32)
+    values[0, 0] = np.nan  # one NaN in the top-left 2x2 block
+    values[2, 2] = values[2, 3] = values[3, 2] = values[3, 3] = np.nan  # all-NaN block
+    seed = RadarMosaic(
+        values=values, timestamp=_SEED.timestamp,
+        proj_def=_SEED.proj_def, x_scale=500.0, y_scale=500.0,
+        ul_lon=_SEED.ul_lon, ul_lat=_SEED.ul_lat,
+        ur_lon=_SEED.ur_lon, ur_lat=_SEED.ur_lat,
+        ll_lon=_SEED.ll_lon, ll_lat=_SEED.ll_lat,
+        lr_lon=_SEED.lr_lon, lr_lat=_SEED.lr_lat,
+    )
+    out = downsample_mosaic(seed, factor=2)
+
+    # Block with one NaN: mean of remaining 3 finite cells (all 1.0) = 1.0.
+    assert out.values[0, 0] == 1.0
+    # Block with 4 NaNs: result is NaN.
+    assert np.isnan(out.values[1, 1])
+
+
+def test_downsample_mosaic_factor_1_returns_input(tmp_path: Path) -> None:
+    out = downsample_mosaic(_SEED, factor=1)
+    assert out is _SEED

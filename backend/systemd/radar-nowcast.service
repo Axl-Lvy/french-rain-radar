@@ -12,6 +12,10 @@ EnvironmentFile=/etc/radar/env
 ExecStart=/opt/radar/backend/.venv/bin/radar nowcast
 Nice=10
 TimeoutStartSec=120
+# Cap pysteps LK in its cgroup so an OOM never reaches the host. The CLI
+# downsamples radar to 1 km before the call; under that, peak RSS stays
+# comfortably under 2G. Hitting the cap is a real failure (loud exit code).
+MemoryMax=2G
 ProtectSystem=strict
 ReadWritePaths=/var/lib/radar
 PrivateTmp=true
