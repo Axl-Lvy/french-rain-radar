@@ -14,11 +14,16 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class Manifest(
     val manifestVersion: Int,
-    val generatedAt: Instant,
     val bbox: Bbox,
     val colorScale: String? = null,
     val layers: Layers,
 )
+// Note: the schema's `generatedAt` is intentionally not modelled here.
+// The backend writes it with microsecond precision (e.g. ".327681Z"); Kotlin/Wasm's
+// kotlinx-datetime Instant parser rejects sub-millisecond fractional seconds and
+// throws, which `pollManifest`'s runCatching silently swallows — leaving the UI
+// stuck on its loading spinner. `ignoreUnknownKeys = true` lets the field exist
+// in the JSON without being decoded.
 
 @Serializable
 data class Bbox(
